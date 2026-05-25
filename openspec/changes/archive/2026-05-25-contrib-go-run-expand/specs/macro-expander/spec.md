@@ -1,6 +1,6 @@
 ## MODIFIED Requirements
 
-### Requirement: Expander 链接与激活
+### Requirement: Provider 激活与 Expander 链接
 
 `ExpandPackages(patterns, linked map[string]macro.Expander)` MUST 对每个待展开包：
 
@@ -26,19 +26,3 @@
 
 - **WHEN** 宏主文件 import `contrib/inline` 与 `contrib/try`，但 `linked` 仅含 `contrib/inline`
 - **THEN** 该包 MUST 仅注册 `syntax-inline`；对 `Try(...)` 调用 MUST 展开失败
-
-## REMOVED Requirements
-
-### Requirement: Provider 激活与 Expander 链接
-
-**Reason**: `extra []Provider` 与 official 目录合并模型移除，由 `linked map[string]macro.Expander` 统一替代；删除 `expander.Provider` 类型。
-
-**Migration**: 使用 `expandtool.Register` / `expandtool.Registered()`；**examples/cmd/macroexpand** 通过 `contrib/register` 完成官方宏库 link。
-
-#### Scenario: 未 import 的官方库不链接
-
-（由 MODIFIED「Expander 链接与激活」中「未 import 的宏库不 link」覆盖。）
-
-#### Scenario: extra 覆盖官方库
-
-（官方目录已删除，无 extra/official 覆盖语义；同 path 仅一条 linked 条目。）

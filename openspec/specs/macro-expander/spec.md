@@ -83,21 +83,28 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 ### Requirement: Provider 激活与 Expander 链接
 
-`ExpandPackages(patterns, extra []Provider)` MUST 对每个待展开包：
+`ExpandPackages(patterns, linked map[string]macro.Expander)` MUST 对每个待展开包：
 
 1. 收集宏主文件所在包的 **import 路径集合**；
-2. 将 `extra` 中 **import 路径命中** 的项与 **官方宏库目录** 中命中项合并为候选（同一路径时 `extra` 覆盖官方项）；
-3. 仅对候选 provider 解析 AST、注册桩名并绑定 `Expander`。
+2. 取 **`linked` 的 key 与 import 集合的交集** 为候选宏库路径；
+3. 对每个候选路径：解析 provider AST（含 `//macro:`）、注册 panic 桩，并绑定 `linked[path]` 的 `Expander`。
 
-引擎 MUST NOT 在识别或 splice 逻辑中对 `syntax-try`、`syntax-inline` 或任何 `syntax-id` 硬编码分支。官方宏库（`inline`、`try`）的 `Expander` 链接 MAY 集中在 `expander` 包；**MUST NOT** 在 `cmd/macro` 中默认传入完整官方列表（须由 import 驱动激活）。
+引擎 MUST NOT 维护官方宏库目录，MUST NOT 在识别或 splice 逻辑中对任何 `syntax-id` 硬编码分支。
 
-#### Scenario: 未 import 的官方库不链接
+根 module 的 `internal/expander` 包及其测试 MUST NOT import contrib。对外展开入口为 `macro/expandtool`（不导出 expander 包路径给宏使用方）。
 
-- **WHEN** 宏主文件仅 import `inline`、未 import `try`
-- **THEN** 该包展开时 MUST 仅注册 `syntax-inline`，MUST NOT 注册 `syntax-try`
+#### Scenario: 未 import 的宏库不 link
 
-#### Scenario: extra 覆盖官方库
+- **WHEN** `linked` 含 `contrib/try`，但宏主文件未 import `contrib/try`
+- **THEN** 该包展开时 MUST NOT 注册 `syntax-try`
 
-- **WHEN** 调用方传入 `extra` 中 `ImportPath` 与官方 `inline` 相同且 `SyntaxID` 不同
-- **THEN** 该路径 MUST 使用 `extra` 中的 `Expand`，而非官方目录中的默认项
+#### Scenario: 已 import 但未 link 则展开失败
+
+- **WHEN** 宏主文件 import `contrib/try` 并调用 `Try(...)`，但 expand 工具传入的 `linked` 为空或不包含该 path
+- **THEN** 展开 MUST 失败（未知 stub 或未注册），且 MUST NOT 静默跳过
+
+#### Scenario: 仅 link 已 import 的子集
+
+- **WHEN** 宏主文件 import `contrib/inline` 与 `contrib/try`，但 `linked` 仅含 `contrib/inline`
+- **THEN** 该包 MUST 仅注册 `syntax-inline`；对 `Try(...)` 调用 MUST 展开失败
 

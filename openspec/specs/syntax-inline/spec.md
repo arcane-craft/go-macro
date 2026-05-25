@@ -29,12 +29,17 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 ### Requirement: 可选官方宏库与引入方式
 
-`inline` 包 MUST 作为**官方宏库**发布：框架不默认启用；使用方 MUST 在宏主文件中 import `github.com/arcane-craft/go-macro/inline` 后，`go tool macro expand` 方可展开 `Inline(...)`。
+`inline` 包 MUST 作为 contrib 子 module 内的官方宏库发布，路径为 `github.com/arcane-craft/go-macro/contrib/inline`。使用方 MUST 在宏主文件中 import 该路径，且 expand 工具的 `linked` map MUST 包含该 import path 与 `InlineExpand`，方可展开 `Inline(...)`。
 
 #### Scenario: 未 import 时不展开
 
-- **WHEN** 宏主文件调用 `Inline(...)` 但未 import `inline` 包
+- **WHEN** 宏主文件调用 `Inline(...)` 但未 import `contrib/inline`
 - **THEN** 展开管线 MUST NOT 注册 `syntax-inline`
+
+#### Scenario: import 但未 link 时不展开
+
+- **WHEN** 宏主文件 import `contrib/inline`，但 expand 工具 `linked` 未含该 path
+- **THEN** 对 `Inline(...)` 的调用 MUST NOT 被展开
 
 ### Requirement: 与框架边界
 
@@ -47,10 +52,10 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 ### Requirement: mactest 单测
 
-`InlineExpand` MUST 具备不依赖 `//go:build macro` 的 `mactest` 单测。
+`InlineExpand` MUST 具备不依赖 `//go:build macro` 的 `mactest` 单测，测试包路径 MUST 为 `contrib/inline`（或 `contrib/inline_test`）。
 
 #### Scenario: 纯 Expand 测试
 
-- **WHEN** 执行 `go test ./inline/...`
-- **THEN** 测试 MUST 无需全链路 `macro expand` 即可通过
+- **WHEN** 在 contrib 子 module 内执行 `go test ./inline/...`
+- **THEN** 测试 MUST 无需全链路 expand 即可通过
 

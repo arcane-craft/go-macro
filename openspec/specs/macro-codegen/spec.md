@@ -3,30 +3,27 @@
 ## Purpose
 TBD - created by archiving change go-macro-extension. Update Purpose after archive.
 ## Requirements
-### Requirement: go tool macro CLI
-
-项目 MUST 提供可通过 `go tool macro` 调用的命令行工具，支持 `expand` 子命令对指定包路径执行宏展开。
-
-`cmd/macro` 的 `expand` **MUST NOT** 在编译期硬编码或默认注册本仓库官方宏库（`inline`、`try`）；官方库由宏主文件 `import` 触发，经 `expander` 官方目录衔接（见 `macro-core` / `macro-expander` spec）。
-
-#### Scenario: 展开当前模块包
-
-- **WHEN** 用户在模块根目录执行 `go tool macro expand ./...`
-- **THEN** 工具 MUST 扫描所有包、执行展开并写回生成文件
-
-#### Scenario: expand 不携带内置 provider 列表
-
-- **WHEN** `cmd/macro` 调用 `expander.ExpandPackages`
-- **THEN** 传入的额外 provider 列表 MUST 为空（`nil` 或零长度），不得将 `inline`/`try` 的 `Expand` 作为 CLI 默认参数
-
 ### Requirement: go generate 集成
 
-工具 MUST 支持在源文件中通过 `//go:generate go tool macro expand` 触发与 CLI 等价的展开流程。
+工具链 MUST 支持在宏主文件中通过**一行** generate 触发 expand，**无需**用户项目内 `tools/macroexpand`：
 
-#### Scenario: generate 钩子展开
+```go
+//go:generate go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .
+```
 
-- **WHEN** 用户执行 `go generate ./...` 且包内含 generate 指令
-- **THEN** 对应包的宏调用 MUST 被展开且生成文件被更新
+（整模块可用 `./...`；按包展开用 `.`。）
+
+该命令 MUST 编译并运行 **examples module** 下的 `cmd/macroexpand`，其内部 blank import `contrib/register` 并调用 `macro/expandtool.Main()`。
+
+#### Scenario: generate 零项目 expand 文件
+
+- **WHEN** 用户仅使用 contrib 官方宏库，宏主文件含上述 generate，且项目内无 `tools/macroexpand`
+- **THEN** `go generate` MUST 成功写回 `*_macro_gen.go`
+
+#### Scenario: 按包 generate
+
+- **WHEN** 宏主文件含 `//go:generate go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .`
+- **THEN** MUST 仅展开该 generate 所在包（或指令指定的 patterns）
 
 ### Requirement: 方案 C 主文件 + 生成侧写回
 
@@ -91,26 +88,21 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 ### Requirement: 幂等展开
 
-对同一输入源码重复执行展开，工具 MUST 产生相同的生成文件内容（除时间戳注释外可配置忽略）。
+对同一输入重复执行 `go run .../examples/cmd/macroexpand`，生成文件 MUST 一致（时间戳除外）。
 
 #### Scenario: 重复执行 expand
 
-- **WHEN** 连续两次执行 `go tool macro expand` 且主文件未变
-- **THEN** `foo_macro_gen.go` 内容 MUST 一致
+- **WHEN** 连续两次相同 expand 且主文件未变
+- **THEN** `foo_macro_gen.go` MUST 一致
 
 ### Requirement: 仅展开当前主模块
 
-`go tool macro expand` MUST 仅处理**当前主模块**内的包（如 `expand ./...`）。MUST NOT 修改 module cache 或依赖模块源码树。
-
-#### Scenario: 不展开依赖模块
-
-- **WHEN** 某依赖库在 module cache 中含 macro 主文件但未提交 `*_macro_gen.go`
-- **THEN** expand 命令 MUST NOT 写入该依赖路径；文档 MUST 要求库作者在发布前于**其自身仓库**内 expand 并提交生成物
+`examples/cmd/macroexpand` MUST 仅处理**调用方所在**主 module 内包，MUST NOT 写 module cache。
 
 #### Scenario: 本模块 expand
 
-- **WHEN** 用户于主模块根目录执行 `go tool macro expand ./...`
-- **THEN** 工具 MUST 仅更新本模块内的 `*_macro_gen.go`
+- **WHEN** 于某 module 根执行 `go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand ./...`
+- **THEN** MUST 仅更新该 module 内 `*_macro_gen.go`
 
 ### Requirement: 对外库须提交生成物
 
@@ -125,4 +117,35 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 - **WHEN** 项目不作为对外库发布
 - **THEN** 文档 MAY 允许仅在本模块 CI 中 `expand` 而不提交 gen，但 MUST 明确此方式不适用于被依赖的库
+
+### Requirement: 框架 macroexpand（examples module）
+
+项目 MUST 在 **examples** 子 module 提供 `cmd/macroexpand`，作为宏使用方默认 expand 入口。另实现 MUST 仅 blank import `contrib/register` 并调用 `expandtool.Main()`，MUST NOT 包含其它业务逻辑。
+
+根 module MUST NOT 包含 `cmd/macroexpand`。
+
+#### Scenario: 与 expandtool Main 等价
+
+- **WHEN** 用户 `go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .` 且进程已 link `contrib/register`
+- **THEN** 行为 MUST 与在同一进程内调用 `expandtool.Main()` 一致
+
+### Requirement: init provider 生成 register 而非 expand 工具
+
+`go tool macro init provider` MUST 为**宏作者**生成 provider 骨架，含 `register/register.go`：在 `init` 中 `expandtool.Register(<module>/provider/import/path>, ProviderExpand)`。
+
+MUST NOT 生成 `tools/macroexpand` 或要求宏作者实现 expand main。README MUST 指向宏**使用方**使用 `examples/cmd/macroexpand` 的 generate 一行。
+
+#### Scenario: 宏作者无 expand main 义务
+
+- **WHEN** 用户执行 `go tool macro init provider mymac`
+- **THEN** 输出 MUST 含 `register/register.go` 且 MUST NOT 含 `tools/macroexpand/main.go`
+
+### Requirement: 消费第三方宏库的附录路径
+
+当宏使用方除 contrib 外还依赖其它带 `register` 子包的宏库时，文档 MAY 说明：复制 `examples/cmd/macroexpand` 为项目内 `cmd/macroexpand` 并**仅**追加 blank import 该宏库的 `register` 包，仍调用 `expandtool.Main()`。该路径 MUST NOT 作为默认快速上手内容。
+
+#### Scenario: 附录不增加宏作者负担
+
+- **WHEN** 第三方宏作者按脚手架发布 `register` 子包
+- **THEN** 宏作者 MUST NOT 需要维护 expand 二进制；链接责任在使用方可选 cmd 或未来框架扩展
 

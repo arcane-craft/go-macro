@@ -1,5 +1,8 @@
-## ADDED Requirements
+# macro-contrib Specification
 
+## Purpose
+TBD - created by archiving change contrib-go-run-expand. Update Purpose after archive.
+## Requirements
 ### Requirement: contrib 独立子 module
 
 `contrib/` MUST 作为独立 Go module 发布（`github.com/arcane-craft/go-macro/contrib`）。根 module 的 `internal/expander`、`macro/expandtool` 及根 module 内所有测试 MUST NOT import contrib 内的宏实现包（`inline`、`try`、`register`）。
@@ -15,6 +18,8 @@
 - **THEN** MUST NOT import `github.com/arcane-craft/go-macro/contrib/...`
 
 ### Requirement: 官方宏库路径
+
+官方宏库 MUST 仅通过下列 import 路径提供：
 
 - `github.com/arcane-craft/go-macro/contrib/inline`
 - `github.com/arcane-craft/go-macro/contrib/try`
@@ -47,3 +52,4 @@ contrib MUST 具备独立 `go test ./...`，含 inline/try 的 mactest 单测。
 
 - **WHEN** 在 contrib 目录执行 `go test ./...`
 - **THEN** MUST 通过
+

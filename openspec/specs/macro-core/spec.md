@@ -44,35 +44,17 @@ Provider 的 `//macro:` 标注函数 MUST 符合 `Expander` 签名。系统 MUST
 
 ### Requirement: 通用宏注册与查找
 
-系统 MUST 支持：对**宏主文件所在包已 import 的** provider 包扫描 `//macro: <syntax-id>` 与 `Expander`，构建「桩名 → syntax-id → Expander」注册表；**不**将 `try` 包写死为唯一 provider，且 **MUST NOT** 在 `go tool macro` CLI 中默认注册任何具体宏库（含本仓库 `inline`、`try`）。
+系统 MUST 支持：对**宏主文件所在包已 import 的**宏库包扫描 `//macro: <syntax-id>` 与 panic 桩，并结合 **`linked map[string]macro.Expander`**（来自 `expandtool.Registered()` 或显式传入）构建注册表。`internal/expander` 与 `macro/expandtool` MUST NOT 硬编码任何具体宏库 Expander。
 
-#### Scenario: 仅注册已 import 的 provider
+#### Scenario: 仅注册已 import 且已 link 的宏库
 
-- **WHEN** 模块内存在带 `//macro:` 的包 `foo/macrousage`，但待展开的宏主文件包未 import `macrousage`
-- **THEN** 注册表 MUST NOT 包含 `macrousage` 的桩
+- **WHEN** 宏库已 `expandtool.Register`，但宏主文件未 import 该包
+- **THEN** 注册表 MUST NOT 包含该包的桩
 
 #### Scenario: 注册多桩名到同一 syntax-id
 
-- **WHEN** provider 包中 `//macro: syntax-try` 绑定 `TryExpand`，且存在桩 `Try` 与 `Try2`
-- **THEN** 注册表 MUST 将 `Try`、`Try2` 均映射到同一 `TryExpand` 函数值
-
-### Requirement: 官方宏库（可选依赖）
-
-本模块内维护的 `inline`、`try` 等包 MUST 视为**官方宏库**（与框架同模块发布），而非 CLI 内置能力。使用方 MUST 在宏主文件中 `import` 所需官方库后，`go tool macro expand` 方可展开对应调用；未 import 的官方库 MUST NOT 进入该包的注册表。
-
-展开引擎 MAY 维护「官方宏库 import 路径 → `Expander`」目录（实现位于 `expander`，非 `cmd/macro`），且 MUST 仅对宏主文件**已 import** 的路径启用；`cmd/macro` 的 `expand` 子命令 MUST 以空额外 provider 列表调用引擎（不硬编码 `inline`/`try` import）。
-
-自研 provider（`init provider` 等）若未列入官方目录，调用方 MUST 通过 `expander.ExpandPackages(..., extra []Provider)` 或等价自定义 expand 入口传入 `Expander` 函数指针。
-
-#### Scenario: CLI 不默认启用官方宏库
-
-- **WHEN** 用户执行 `go tool macro expand` 且宏主文件未 import `github.com/arcane-craft/go-macro/try`
-- **THEN** `cmd/macro` MUST NOT 因 CLI 内置列表而注册 `syntax-try`；对 `Try(...)` 的调用 MUST NOT 被展开（按普通函数或编译错误处理）
-
-#### Scenario: import 官方库后展开
-
-- **WHEN** 宏主文件 import `github.com/arcane-craft/go-macro/try` 并调用 `Try(...)`，且用户执行 `go tool macro expand`
-- **THEN** 注册表 MUST 包含 `syntax-try` 的桩与 `TryExpand`，并正常写回 `*_macro_gen.go`
+- **WHEN** 宏库包中 `//macro: syntax-try` 绑定 `TryExpand`，存在桩 `Try` 与 `Try2`，且 `linked` 含该 import path
+- **THEN** 注册表 MUST 将 `Try`、`Try2` 均映射到同一 `TryExpand`
 
 ### Requirement: 轻薄 AST 辅助（首版）
 
@@ -109,4 +91,25 @@ provider 包内的语法桩（包级 panic 函数）在运行时 MUST panic，�
 
 - **WHEN** 运行时代码直接调用 provider 包级语法桩（非经 expand 写回）
 - **THEN** MUST panic 并提示不可直接调用
+
+### Requirement: expandtool 展开入口
+
+`macro` 包 MUST 提供子包 `macro/expandtool`，供 expand 二进制与高级集成使用，至少包含：
+
+- `Register(importPath string, expand Expander)` — 注册可 link 的 Expander
+- `Registered() map[string]Expander` — 返回当前已注册副本
+- `Run(args []string, linked map[string]Expander) error` — `args` 为空时 MUST 默认 `[]string{"./..."}`；`linked` 为 `nil` 时使用 `Registered()`；内部调用 `expander.ExpandPackages`
+- `Main()` — `Run(os.Args[1:], nil)`，错误时 MUST 写 stderr 并以非零状态退出
+
+宏作者（provider 包作者）MUST NOT 被要求实现或维护 expand main；`Main`/`Run` 由 **examples/cmd/macroexpand**（或用户自建等价 cmd）调用。
+
+#### Scenario: Main 使用 Registered 注册表
+
+- **WHEN** `contrib/register` 已在进程内 `init` 中 Register 官方宏库，且用户执行 `go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .`
+- **THEN** MUST 展开宏主文件中已 import 且已 Register 的官方宏调用
+
+#### Scenario: Run 默认包路径
+
+- **WHEN** 调用 `Run(nil, linked)` 或 `Run([]string{}, linked)`
+- **THEN** MUST 等价于对 `./...` 执行 expand
 
