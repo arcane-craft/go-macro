@@ -26,6 +26,16 @@ func NewRegistry() *Registry {
 	}
 }
 
+// ProviderSyntaxID returns the //macro: syntax-id from provider source files.
+func ProviderSyntaxID(files []*ast.File) (string, error) {
+	for _, f := range files {
+		if sid, ok := fileMacroSyntaxID(f); ok {
+			return sid, nil
+		}
+	}
+	return "", fmt.Errorf("macro: provider files missing //macro: directive")
+}
+
 // RegisterProvider scans provider AST files, registers panic stubs, and binds syntax-id to expander.
 func (r *Registry) RegisterProvider(importPath string, files []*ast.File, syntaxID string, expand Expander) error {
 	if expand == nil {

@@ -9,16 +9,18 @@ Go 过程宏（procedural macro）框架：宏作者在 provider 包中定义语
 ```go
 //go:build macro
 
-//go:generate go tool macro expand
+//go:generate go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .
 ```
 
-2. 在宏主文件中 **import 你要用的宏库**（如官方库 `inline`、`try`，或自研 provider）并编写宏调用。未 import 的宏库不会参与展开。
+2. 在宏主文件中 **import 你要用的宏库**（如官方库 `contrib/inline`、`contrib/try`，或自研 provider）并编写宏调用。未 import 的宏库不会参与展开。
 
-3. 展开本模块：
+3. 展开本模块（与 generate 等价）：
 
 ```bash
-go tool macro expand ./...
+go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand ./...
 ```
+
+无需在项目内维护 `tools/macroexpand`。
 
 4. 提交 `foo.go` 与 `foo_macro_gen.go`（**对外库 MUST 提交 gen**）。
 
@@ -33,8 +35,8 @@ go test ./...
 
 | 命令 | 说明 |
 |------|------|
-| `go tool macro expand [packages]` | 展开当前模块内宏主文件（默认 `./...`） |
-| `go tool macro init provider <name>` | 创建最小 provider 骨架 |
+| `go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand [packages]` | 展开当前模块内宏主文件（默认 `./...`）；示例见 `examples/` module |
+| `go tool macro init provider <name>` | 创建最小 provider 骨架（含 `register/`） |
 
 ## gopls
 
@@ -51,13 +53,17 @@ go test ./...
 
 ## 官方宏库（可选依赖）
 
-与框架同模块维护，**由你在宏主文件中 import 后才会展开**；`go tool macro` 不会替你默认启用。
+`contrib` 子 module 维护，**由你在宏主文件中 import 后才会展开**；框架 expand 二进制通过 `contrib/register` 在编译期 link Expander。
 
-- `inline/` — 表达式宏
-- `try/` — `Try` 族错误处理宏
+- `contrib/inline/` — 表达式宏
+- `contrib/try/` — `Try` 族错误处理宏
 
 ## 模块路径
 
 ```
 github.com/arcane-craft/go-macro
+github.com/arcane-craft/go-macro/contrib
+github.com/arcane-craft/go-macro/examples
 ```
+
+官方 expand 入口位于 `examples/cmd/macroexpand`（`examples` 独立 module，含 contrib link）。

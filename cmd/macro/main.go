@@ -1,11 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/arcane-craft/go-macro/expander"
+	"strings"
 )
 
 func main() {
@@ -14,11 +14,6 @@ func main() {
 		os.Exit(2)
 	}
 	switch os.Args[1] {
-	case "expand":
-		if err := runExpand(os.Args[2:]); err != nil {
-			fmt.Fprintf(os.Stderr, "macro expand: %v\n", err)
-			os.Exit(1)
-		}
 	case "init":
 		if len(os.Args) < 3 || os.Args[2] != "provider" {
 			fmt.Fprintf(os.Stderr, "usage: go tool macro init provider <name>\n")
@@ -42,25 +37,35 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, `go tool macro — Go procedural macro toolchain
 
 Usage:
-  go tool macro expand [packages]   Expand macro-tagged files (default ./...)
   go tool macro init provider <name>   Create minimal provider skeleton
 
 Examples:
-  go tool macro expand ./...
-  //go:generate go tool macro expand
+  go tool macro init provider mymac
 `)
 }
 
-func runExpand(args []string) error {
-	patterns := []string{"./..."}
-	if len(args) > 0 {
-		patterns = args
+func moduleImportPath() string {
+	data, err := os.ReadFile("go.mod")
+	if err != nil {
+		return ""
 	}
-	return expander.ExpandPackages(patterns, nil)
+	sc := bufio.NewScanner(strings.NewReader(string(data)))
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
+		}
+	}
+	return ""
 }
 
 func runInitProvider(name string) error {
 	dir := name
+	mod := moduleImportPath()
+	importPath := name
+	if mod != "" {
+		importPath = mod + "/" + name
+	}
 	files := map[string]string{
 		"stubs.go": fmt.Sprintf(`package %s
 
@@ -107,8 +112,19 @@ func f() int { return Macro(42) }
 		t.Fatal(err)
 	}
 }
-`, name, name, name, name),
-		"README.md": fmt.Sprintf("# %s macro provider\n\nSee [author guide](https://github.com/arcane-craft/go-macro/blob/main/docs/author-guide.md).\n", name),
+`, name, importPath, name, name),
+		"register/register.go": fmt.Sprintf(`package register
+
+import (
+	"%s"
+	"github.com/arcane-craft/go-macro/macro/expandtool"
+)
+
+func init() {
+	expandtool.Register("%s", %s.MacroExpand)
+}
+`, importPath, importPath, name),
+		"README.md": fmt.Sprintf("# %s macro provider\n\nSee [author guide](https://github.com/arcane-craft/go-macro/blob/main/docs/author-guide.md).\n\nConsumers expand with:\n\n```go\n//go:generate go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .\n```\n", name),
 	}
 	for path, content := range files {
 		full := filepath.Join(dir, path)

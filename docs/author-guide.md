@@ -3,10 +3,18 @@
 ## 框架契约
 
 - Provider 包：`//macro: <syntax-id>` + `XxxExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error)`
-- **引入方式**：宏主文件必须 `import` 该 provider；`go tool macro expand` 仅对**已 import** 的包注册并展开（含本仓库官方宏库 `inline`、`try`）
+- **引入方式**：宏主文件必须 `import` 该 provider；expand 工具仅对**已 import 且已在 expand 二进制中 link** 的包注册并展开
 - 语法桩：包级 `panic` 函数，运行时不可调用
 - `ExpandResult`：`Stmts` / `Expr` / `Exprs`（`Exprs` 少用；`syntax-try` 在 `return` 语境禁止 `Exprs`）
 - `Context.EnclosingFunc`：首版必选（`*ast.FuncDecl` 或 `*ast.FuncLit`）
+
+## 角色分工
+
+| 角色 | 负责 | 不负责 |
+|------|------|--------|
+| 框架 | `macro/expandtool`、`examples/cmd/macroexpand`、`contrib/register` | — |
+| 宏作者（provider） | stubs、`Expand`、`//macro:`、`register/register.go`（脚手架） | expand main、`tools/macroexpand`、手写 linked map |
+| 宏使用方 | import 宏库、一行 generate | 默认无需项目内 expand 代码 |
 
 ## 调用语境（Site）
 
@@ -41,23 +49,31 @@ func f() int { return 1 + MyStub(2) }
 go tool macro init provider mymac
 ```
 
-生成最小单桩骨架，详见包内 README。
+生成最小单桩骨架与 `register/register.go`（`init` 内 `expandtool.Register`）。宏使用方展开用：
+
+```go
+//go:generate go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .
+```
 
 ## 发布 checklist（对外库）
 
-1. `go tool macro expand ./...`
+1. `go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand ./...`
 2. 提交 `*_macro_gen.go`
 3. `go test ./...`（无 `-tags macro`）
 4. CI 可选：`git diff --exit-code` 防止 gen 漂移
 
 ## 官方宏库（可选）
 
-本模块内维护，当作普通依赖使用：在宏主文件中 import 后即可 `go tool macro expand`，无需在 CLI 里单独登记。
+`contrib` 子 module：`contrib/inline`、`contrib/try`。宏主文件 import 对应路径后，使用 `examples/cmd/macroexpand`（已 blank import `contrib/register`）或自建等价 cmd 即可展开。
 
-- `syntax-inline`：`inline/`，表达式宏
-- `syntax-try`：`try/`，多桩 `Try0`/`Try`/`Try2`/…
+- `syntax-inline`：`contrib/inline/`
+- `syntax-try`：`contrib/try/`
 
-自研 provider（`init provider` 生成）须在同一进程内提供 `Expand` 函数指针（例如自定义 `tools` 入口调用 `expander.ExpandPackages(..., []Provider{...})`）；官方库由 expander 在检测到 import 时自动衔接。
+## 附录：消费第三方宏库
+
+当除 contrib 外还需其它带 `register` 子包的宏库时，使用方 MAY 复制 `examples/cmd/macroexpand` 到项目内，**仅**追加 blank import 该库的 `register` 包并仍调用 `expandtool.Main()`。无需手写 `linked` map，也无需 `tools/macroexpand`。
+
+第三方宏作者 MUST 提供 `register` 子包（`go tool macro init provider` 已生成），**不必**维护 expand 二进制。
 
 ### Try 桩族（附录）
 

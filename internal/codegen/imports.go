@@ -25,7 +25,7 @@ func filterUnusedImports(file *ast.File) {
 		} else if i := strings.LastIndex(path, "/"); i >= 0 {
 			local = path[i+1:]
 		}
-		if strings.HasSuffix(path, "/try") && !used[local] {
+		if !used[local] {
 			continue
 		}
 		kept = append(kept, imp)
