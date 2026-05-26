@@ -13,7 +13,4 @@ require (
 	golang.org/x/tools v0.30.0 // indirect
 )
 
-replace (
-	github.com/arcane-craft/go-macro => ../
-	github.com/arcane-craft/go-macro-contrib => ../../go-macro-contrib
-)
+replace github.com/arcane-craft/go-macro => ../
