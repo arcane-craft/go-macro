@@ -58,7 +58,7 @@ go test ./...
 - `github.com/arcane-craft/go-macro-contrib/inline` — 表达式宏
 - `github.com/arcane-craft/go-macro-contrib/try` — `Try` 族错误处理宏
 
-本地开发：将 `go-macro-contrib` clone 到与 `go-macro` 同级目录 `../go-macro-contrib`；`examples/go.mod` 已含 `replace` 指向该路径。
+本地开发：将 `go-macro-contrib` clone 到与 `go-macro` 同级目录 `../go-macro-contrib`。`examples/go.mod` 以版本化 `require` 消费已发布的 contrib；若需并行改 contrib，可在本地向 `examples/go.mod` 添加 `replace github.com/arcane-craft/go-macro-contrib => ../go-macro-contrib`（不必提交）。根目录不强制 `go.work`；根 module 与 examples 可分别测试（根：`GOWORK=off go test ./...`；examples：在 `examples/` 下 `go test ./...`）。
 
 ## 模块路径
 

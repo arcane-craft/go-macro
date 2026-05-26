@@ -75,7 +75,7 @@ go tool macro init provider mymac
 - `syntax-inline`：`github.com/arcane-craft/go-macro-contrib/inline`
 - `syntax-try`：`github.com/arcane-craft/go-macro-contrib/try`
 
-本地联调：clone `go-macro-contrib` 至 `../go-macro-contrib`（与 `go-macro` 同级）；`examples/go.mod` 使用 `replace github.com/arcane-craft/go-macro-contrib => ../go-macro-contrib`。
+本地联调：clone `go-macro-contrib` 至 `../go-macro-contrib`（与 `go-macro` 同级）。已提交的 `examples/go.mod` 通过 `require` 引用已发布 contrib；并行改 contrib 时 **MAY** 本地添加 `replace github.com/arcane-craft/go-macro-contrib => ../go-macro-contrib`（不必提交）。根目录 **MAY** 提供 `go.work`（`use` 为 `.` 与 `./examples`），**MUST NOT** 要求根 `go.work` 才能满足规范。测试：根 `GOWORK=off go test ./...`；examples 目录内 `go test ./...`。contrib 仓已提交 `go.mod` 以发布 tag `require` 为准；本地联调核心 **MAY** 在 `go-macro-contrib/go.mod` 添加 `replace github.com/arcane-craft/go-macro => ../go-macro`（不提交）。
 
 ## 附录：消费第三方宏库
 

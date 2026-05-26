@@ -16,6 +16,6 @@ Official macro libraries moved from `github.com/arcane-craft/go-macro/contrib` t
 go get github.com/arcane-craft/go-macro-contrib@v0.1.0
 ```
 
-Local development: clone `go-macro-contrib` as a sibling of this repo (`../go-macro-contrib` from repo root). The `examples` module uses `replace github.com/arcane-craft/go-macro-contrib => ../../go-macro-contrib`.
+Local development: clone `go-macro-contrib` as a sibling of this repo (`../go-macro-contrib` from repo root). The committed `examples/go.mod` uses versioned `require` for `go-macro-contrib`; optional local `replace github.com/arcane-craft/go-macro-contrib => ../go-macro-contrib` for parallel contrib work (not required in committed `go.mod`).
 
-Removed in-repo `contrib/` directory. Root `go.work` now only includes root and `./examples`.
+Removed in-repo `contrib/` directory. Root `go.work` is optional (MAY include root and `./examples` only); root and `examples` modules are tested separately when no workspace is used.
