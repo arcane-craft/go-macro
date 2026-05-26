@@ -4,7 +4,7 @@ go 1.22.0
 
 require (
 	github.com/arcane-craft/go-macro v0.1.0
-	github.com/arcane-craft/go-macro-contrib v0.1.0
+	github.com/arcane-craft/go-macro-contrib v0.1.1
 )
 
 require (

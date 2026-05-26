@@ -1,5 +1,5 @@
-github.com/arcane-craft/go-macro-contrib v0.1.0 h1:Rs/VSAFkj8cGYnt6E9neikZII2RYnvGVH+g+7jwW0kI=
-github.com/arcane-craft/go-macro-contrib v0.1.0/go.mod h1:OePrKhTUdlRghiIjcFNAZ1W2mNFZPNxXH5KRJAiU6t0=
+github.com/arcane-craft/go-macro-contrib v0.1.1 h1:ComNR1NgfZUIrSdt9rjna4cAYHOV0gJyCq6N0OVY/Ds=
+github.com/arcane-craft/go-macro-contrib v0.1.1/go.mod h1:WJVKCw+Yd2QkRy5x6qVojYNPTUz/RtwdWBe6K7t7BrE=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 golang.org/x/mod v0.23.0 h1:Zb7khfcRGKk+kqfxFaP5tZqCnDZMjC5VtUBs87Hr6QM=
