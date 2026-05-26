@@ -48,7 +48,7 @@ func f() int { return 1 + MyStub(2) }
 ## init provider
 
 ```bash
-go tool macro init provider mymac
+go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider mymac
 ```
 
 生成最小单桩骨架与 `register/register.go`（`init` 内 `expandtool.Register`）。宏使用方展开用：
@@ -81,7 +81,7 @@ go tool macro init provider mymac
 
 当除 `go-macro-contrib` 外还需其它带 `register` 子包的宏库时，使用方 MAY 复制 `examples/cmd/macroexpand` 到项目内，**仅**追加 blank import 该库的 `register` 包并仍调用 `expandtool.Main()`。无需手写 `linked` map，也无需 `tools/macroexpand`。
 
-第三方宏作者 MUST 提供 `register` 子包（`go tool macro init provider` 已生成），**不必**维护 expand 二进制。
+第三方宏作者 MUST 提供 `register` 子包（`macro init provider` 脚手架已生成），**不必**维护 expand 二进制。
 
 ### Try 桩族（附录）
 

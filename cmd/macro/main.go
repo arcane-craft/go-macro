@@ -16,7 +16,7 @@ func main() {
 	switch os.Args[1] {
 	case "init":
 		if len(os.Args) < 3 || os.Args[2] != "provider" {
-			fmt.Fprintf(os.Stderr, "usage: go tool macro init provider <name>\n")
+			fmt.Fprintf(os.Stderr, "usage: go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider <name>\n")
 			os.Exit(2)
 		}
 		name := "mymac"
@@ -34,13 +34,13 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Fprintf(os.Stderr, `go tool macro — Go procedural macro toolchain
+	fmt.Fprintf(os.Stderr, `macro — Go procedural macro toolchain
 
 Usage:
-  go tool macro init provider <name>   Create minimal provider skeleton
+  go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider <name>
 
-Examples:
-  go tool macro init provider mymac
+Example:
+  go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider mymac
 `)
 }
 

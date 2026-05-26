@@ -126,7 +126,7 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 根 module MUST NOT 包含 `cmd/macroexpand`（布局细节以 `macro-repo-layout` 为准）。
 
-该路径为宏使用方 **RECOMMENDED** 快速上手命令，MUST NOT 被解释为唯一允许的 expand 入口。
+`go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand` MUST 作为 **examples 子 module 内** 文档与示例源码的 RECOMMENDED expand 命令。该路径 MUST NOT 被解释为宏使用方项目的全局默认入口，亦 MUST NOT 被解释为唯一允许的 expand 入口。
 
 #### Scenario: 参考入口与 expandtool Main 等价
 
@@ -140,14 +140,19 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 ### Requirement: init provider 生成 register 而非 expand 工具
 
-`go tool macro init provider` MUST 为**宏作者**生成 provider 骨架，含 `register/register.go`：在 `init` 中 `expandtool.Register(<module>/provider/import/path>, ProviderExpand)`。
+`go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider <name>`（或与 `cmd/macro` 等价的已发布 module 路径）MUST 为**宏作者**生成 provider 骨架，含 `register/register.go`：在 `init` 中 `expandtool.Register(<module>/provider/import/path>, ProviderExpand)`。
 
-MUST NOT 生成 `tools/macroexpand` 或要求宏作者实现 expand main。README MUST 说明宏**使用方**须承载 expand 入口（register + `expandtool.Main()`），并 **RECOMMENDED** 提供 `examples/cmd/macroexpand` 的 generate 一行作为快速上手模板。
+MUST NOT 生成 `tools/macroexpand` 或要求宏作者实现 expand main。README MUST 说明宏**使用方**须在使用宏的项目内承载 expand 入口（`register` + `expandtool.Main()`）。README `快速上手` MUST 以创建项目内 `cmd/macroexpand` 为首要步骤，并 RECOMMENDED 在使用宏的文件中使用 `//go:generate go run ./cmd/macroexpand .`（或模块下等价路径）。README MUST 通过链接或文字引用 `examples/cmd/macroexpand` 与 `examples/readfile` 作为对照示例，MUST NOT 将 `go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand` 表述为宏使用方项目的默认长期依赖命令。
 
 #### Scenario: 宏作者无 expand main 义务
 
-- **WHEN** 用户执行 `go tool macro init provider mymac`
+- **WHEN** 用户执行 `go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider mymac`
 - **THEN** 输出 MUST 含 `register/register.go` 且 MUST NOT 含 `tools/macroexpand/main.go`
+
+#### Scenario: README 快速上手以自建 expand 为先
+
+- **WHEN** 读者按 README `快速上手` 顺序操作
+- **THEN** MUST 在遇到 `//go:generate` 示例之前看到创建项目内 `cmd/macroexpand` 的说明
 
 ### Requirement: 消费第三方宏库的附录路径
 
