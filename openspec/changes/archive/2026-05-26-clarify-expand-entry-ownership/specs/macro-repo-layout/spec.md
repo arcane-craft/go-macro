@@ -1,8 +1,5 @@
-# macro-repo-layout Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change contrib-go-run-expand. Update Purpose after archive.
-## Requirements
 ### Requirement: 多 module 仓库布局
 
 本仓库 MUST 以三个独立 Go module 组织，路径如下：
@@ -43,38 +40,3 @@ TBD - created by archiving change contrib-go-run-expand. Update Purpose after ar
 
 - **WHEN** 用户在自身项目内实现等价 `cmd/macroexpand`（blank import register 并调用 `expandtool.Main()`）
 - **THEN** MUST 在行为上与参考入口等价，并成功展开已 import 且已 link 的宏
-
-### Requirement: 根 module 测试不依赖 contrib
-
-根 module（`github.com/arcane-craft/go-macro`）内所有 `*_test.go` MUST NOT import `github.com/arcane-craft/go-macro/contrib/...` 任何包（含 `inline`、`try`、`register`）。
-
-依赖真实 `TryExpand` / `InlineExpand` 的宏库单测在 `contrib` module；`examples` 仅保留示例包内 golden 等轻量测试（不强制 module 级 expand 集成测试）。
-
-#### Scenario: 根 go test 无 contrib 边
-
-- **WHEN** 于仓库根执行 `GOWORK=off go test ./...`
-- **THEN** MUST 通过且根 `go.mod` MUST NOT 因测试而引入 `contrib` require
-
-#### Scenario: examples 轻量测试
-
-- **WHEN** 在 `examples` 目录执行 `go test ./...`
-- **THEN** MUST 通过（含 `readfile` 对已提交 `*_macro_gen.go` 的 golden 校验等）
-
-### Requirement: 本地开发 workspace
-
-仓库根 MUST 提供 `go.work`，且 `use` MUST 至少包含根 module、`./contrib`、`./examples`，以便同仓联调与跨 module 测试。
-
-#### Scenario: workspace 联调
-
-- **WHEN** 开发者在仓库根执行 `go test ./...`（默认启用 `go.work`）
-- **THEN** MUST 能同时测试根、contrib、examples 三个 module
-
-### Requirement: 示例包路径
-
-`examples/readfile` 包路径 MUST 为 `github.com/arcane-craft/go-macro/examples/readfile`（属于 examples module）。示例宏主文件 MUST import `contrib/try`（或所需官方库）并使用 examples module 下的 macroexpand generate。
-
-#### Scenario: readfile 示例路径
-
-- **WHEN** expander 或 examples 测试加载 readfile
-- **THEN** 包路径 MUST 为 `github.com/arcane-craft/go-macro/examples/readfile`
-

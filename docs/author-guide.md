@@ -12,9 +12,11 @@
 
 | 角色 | 负责 | 不负责 |
 |------|------|--------|
-| 框架 | `macro/expandtool`、`examples/cmd/macroexpand`、`contrib/register` | — |
+| 框架 | `macro/expandtool`（Register / Run / Main） | 调用方具体 `cmd` 路径、唯一 expand 二进制 |
 | 宏作者（provider） | stubs、`Expand`、`//macro:`、`register/register.go`（脚手架） | expand main、`tools/macroexpand`、手写 linked map |
-| 宏使用方 | import 宏库、一行 generate | 默认无需项目内 expand 代码 |
+| 宏使用方（含本仓 `examples`） | import 宏库；承载 expand 入口（自建 `cmd/macroexpand` 或使用推荐参考路径） | — |
+
+`examples` 是**示例宏调用方项目**，不是框架内置通用工具。`examples/cmd/macroexpand` 演示 blank import `contrib/register` 并调用 `expandtool.Main()`；宏使用方 MAY 复制该模式到自有项目。
 
 ## 调用语境（Site）
 
@@ -55,6 +57,10 @@ go tool macro init provider mymac
 //go:generate go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .
 ```
 
+## 术语澄清（无行为变更）
+
+规范层要求宏调用方项目承载 expand 入口（blank import `register` + `expandtool.Main()`）。`examples/cmd/macroexpand` 为推荐参考实现；文档中的 `go run .../examples/cmd/macroexpand` 推荐命令不变。
+
 ## 发布 checklist（对外库）
 
 1. `go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand ./...`
@@ -64,7 +70,7 @@ go tool macro init provider mymac
 
 ## 官方宏库（可选）
 
-`contrib` 子 module：`contrib/inline`、`contrib/try`。宏主文件 import 对应路径后，使用 `examples/cmd/macroexpand`（已 blank import `contrib/register`）或自建等价 cmd 即可展开。
+`contrib` 子 module：`contrib/inline`、`contrib/try`。宏主文件 import 对应路径后，使用推荐参考入口 `go run .../examples/cmd/macroexpand`（已 blank import `contrib/register`），或在项目内自建等价 `cmd/macroexpand` 即可展开。
 
 - `syntax-inline`：`contrib/inline/`
 - `syntax-try`：`contrib/try/`

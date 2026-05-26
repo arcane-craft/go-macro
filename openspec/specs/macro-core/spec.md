@@ -101,12 +101,12 @@ provider 包内的语法桩（包级 panic 函数）在运行时 MUST panic，�
 - `Run(args []string, linked map[string]Expander) error` — `args` 为空时 MUST 默认 `[]string{"./..."}`；`linked` 为 `nil` 时使用 `Registered()`；内部调用 `expander.ExpandPackages`
 - `Main()` — `Run(os.Args[1:], nil)`，错误时 MUST 写 stderr 并以非零状态退出
 
-宏作者（provider 包作者）MUST NOT 被要求实现或维护 expand main；`Main`/`Run` 由 **examples/cmd/macroexpand**（或用户自建等价 cmd）调用。
+框架 MUST 仅负责提供上述展开能力与接线模式；provider 作者 MUST NOT 被要求实现或维护 expand main。具体可执行入口 MUST 由宏调用方项目承载，`examples/cmd/macroexpand` 可作为参考实现，但 MUST NOT 被视为唯一允许入口。
 
 #### Scenario: Main 使用 Registered 注册表
 
-- **WHEN** `contrib/register` 已在进程内 `init` 中 Register 官方宏库，且用户执行 `go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .`
-- **THEN** MUST 展开宏主文件中已 import 且已 Register 的官方宏调用
+- **WHEN** 某调用方入口进程已通过 `register` 包 `init` 调用 `expandtool.Register` 注册宏库，且执行该入口命令
+- **THEN** MUST 展开宏主文件中已 import 且已 Register 的宏调用
 
 #### Scenario: Run 默认包路径
 

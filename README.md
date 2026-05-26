@@ -35,7 +35,7 @@ go test ./...
 
 | 命令 | 说明 |
 |------|------|
-| `go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand [packages]` | 展开当前模块内宏主文件（默认 `./...`）；示例见 `examples/` module |
+| `go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand [packages]` | **推荐**：使用 examples 参考入口展开当前模块（默认 `./...`）；亦可在项目内自建等价 `cmd/macroexpand` |
 | `go tool macro init provider <name>` | 创建最小 provider 骨架（含 `register/`） |
 
 ## gopls
@@ -66,4 +66,8 @@ github.com/arcane-craft/go-macro/contrib
 github.com/arcane-craft/go-macro/examples
 ```
 
-官方 expand 入口位于 `examples/cmd/macroexpand`（`examples` 独立 module，含 contrib link）。
+宏展开可执行入口由**宏调用方项目**承载（`register` + `expandtool.Main()`）。本仓库 `examples` 为示例调用方工程；`examples/cmd/macroexpand` 为**推荐参考实现**（RECOMMENDED），非唯一路径。
+
+## 术语澄清（无行为变更）
+
+规范要求调用方提供等价 expand 接线能力；`go run .../examples/cmd/macroexpand` 仍为文档推荐默认命令，API 与目录结构不变。

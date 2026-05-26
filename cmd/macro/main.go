@@ -124,7 +124,7 @@ func init() {
 	expandtool.Register("%s", %s.MacroExpand)
 }
 `, importPath, importPath, name),
-		"README.md": fmt.Sprintf("# %s macro provider\n\nSee [author guide](https://github.com/arcane-craft/go-macro/blob/main/docs/author-guide.md).\n\nConsumers expand with:\n\n```go\n//go:generate go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .\n```\n", name),
+		"README.md": fmt.Sprintf("# %s macro provider\n\nSee [author guide](https://github.com/arcane-craft/go-macro/blob/main/docs/author-guide.md).\n\nMacro consumers need an expand entry (blank import register + expandtool.Main()). Recommended:\n\n```go\n//go:generate go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .\n```\n", name),
 	}
 	for path, content := range files {
 		full := filepath.Join(dir, path)
