@@ -36,7 +36,7 @@ func TestImportedProviderPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := importedProviderPaths(pkgs[0])
-	if !m["github.com/arcane-craft/go-macro/contrib/try"] {
+	if !m["github.com/arcane-craft/go-macro-contrib/try"] {
 		t.Fatalf("imports: %v", m)
 	}
 }

@@ -16,7 +16,7 @@
 | 宏作者（provider） | stubs、`Expand`、`//macro:`、`register/register.go`（脚手架） | expand main、`tools/macroexpand`、手写 linked map |
 | 宏使用方（含本仓 `examples`） | import 宏库；承载 expand 入口（自建 `cmd/macroexpand` 或使用推荐参考路径） | — |
 
-`examples` 是**示例宏调用方项目**，不是框架内置通用工具。`examples/cmd/macroexpand` 演示 blank import `contrib/register` 并调用 `expandtool.Main()`；宏使用方 MAY 复制该模式到自有项目。
+`examples` 是**示例宏调用方项目**，不是框架内置通用工具。`examples/cmd/macroexpand` 演示 blank import `go-macro-contrib/register` 并调用 `expandtool.Main()`；宏使用方 MAY 复制该模式到自有项目。
 
 ## 调用语境（Site）
 
@@ -70,14 +70,16 @@ go tool macro init provider mymac
 
 ## 官方宏库（可选）
 
-`contrib` 子 module：`contrib/inline`、`contrib/try`。宏主文件 import 对应路径后，使用推荐参考入口 `go run .../examples/cmd/macroexpand`（已 blank import `contrib/register`），或在项目内自建等价 `cmd/macroexpand` 即可展开。
+独立仓库 `github.com/arcane-craft/go-macro-contrib`：`inline`、`try`。宏主文件 import 对应路径后，使用推荐参考入口 `go run .../examples/cmd/macroexpand`（已 blank import `go-macro-contrib/register`），或在项目内自建等价 `cmd/macroexpand` 即可展开。
 
-- `syntax-inline`：`contrib/inline/`
-- `syntax-try`：`contrib/try/`
+- `syntax-inline`：`github.com/arcane-craft/go-macro-contrib/inline`
+- `syntax-try`：`github.com/arcane-craft/go-macro-contrib/try`
+
+本地联调：clone `go-macro-contrib` 至 `../go-macro-contrib`（与 `go-macro` 同级）；`examples/go.mod` 使用 `replace github.com/arcane-craft/go-macro-contrib => ../go-macro-contrib`。
 
 ## 附录：消费第三方宏库
 
-当除 contrib 外还需其它带 `register` 子包的宏库时，使用方 MAY 复制 `examples/cmd/macroexpand` 到项目内，**仅**追加 blank import 该库的 `register` 包并仍调用 `expandtool.Main()`。无需手写 `linked` map，也无需 `tools/macroexpand`。
+当除 `go-macro-contrib` 外还需其它带 `register` 子包的宏库时，使用方 MAY 复制 `examples/cmd/macroexpand` 到项目内，**仅**追加 blank import 该库的 `register` 包并仍调用 `expandtool.Main()`。无需手写 `linked` map，也无需 `tools/macroexpand`。
 
 第三方宏作者 MUST 提供 `register` 子包（`go tool macro init provider` 已生成），**不必**维护 expand 二进制。
 

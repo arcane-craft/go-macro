@@ -1,8 +1,5 @@
-# macro-repo-layout Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change contrib-go-run-expand. Update Purpose after archive.
-## Requirements
 ### Requirement: 多 module 仓库布局
 
 `go-macro` 仓库 MUST 以两个独立 Go module 组织，路径如下：
@@ -80,4 +77,3 @@ TBD - created by archiving change contrib-go-run-expand. Update Purpose after ar
 
 - **WHEN** expander 或 examples 测试加载 readfile
 - **THEN** 包路径 MUST 为 `github.com/arcane-craft/go-macro/examples/readfile`
-

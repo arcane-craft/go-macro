@@ -4,7 +4,7 @@ go 1.22.0
 
 require (
 	github.com/arcane-craft/go-macro v0.0.0
-	github.com/arcane-craft/go-macro/contrib v0.0.0
+	github.com/arcane-craft/go-macro-contrib v0.1.0
 )
 
 require (
@@ -15,5 +15,5 @@ require (
 
 replace (
 	github.com/arcane-craft/go-macro => ../
-	github.com/arcane-craft/go-macro/contrib => ../contrib
+	github.com/arcane-craft/go-macro-contrib => ../../go-macro-contrib
 )

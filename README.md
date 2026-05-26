@@ -12,7 +12,7 @@ Go 过程宏（procedural macro）框架：宏作者在 provider 包中定义语
 //go:generate go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .
 ```
 
-2. 在宏主文件中 **import 你要用的宏库**（如官方库 `contrib/inline`、`contrib/try`，或自研 provider）并编写宏调用。未 import 的宏库不会参与展开。
+2. 在宏主文件中 **import 你要用的宏库**（如官方库 `go-macro-contrib/inline`、`go-macro-contrib/try`，或自研 provider）并编写宏调用。未 import 的宏库不会参与展开。
 
 3. 展开本模块（与 generate 等价）：
 
@@ -53,17 +53,31 @@ go test ./...
 
 ## 官方宏库（可选依赖）
 
-`contrib` 子 module 维护，**由你在宏主文件中 import 后才会展开**；框架 expand 二进制通过 `contrib/register` 在编译期 link Expander。
+独立仓库 [go-macro-contrib](https://github.com/arcane-craft/go-macro-contrib) 维护，**由你在宏主文件中 import 后才会展开**；框架 expand 二进制通过 `go-macro-contrib/register` 在编译期 link Expander。
 
-- `contrib/inline/` — 表达式宏
-- `contrib/try/` — `Try` 族错误处理宏
+- `github.com/arcane-craft/go-macro-contrib/inline` — 表达式宏
+- `github.com/arcane-craft/go-macro-contrib/try` — `Try` 族错误处理宏
+
+本地开发：将 `go-macro-contrib` clone 到与 `go-macro` 同级目录 `../go-macro-contrib`；`examples/go.mod` 已含 `replace` 指向该路径。
 
 ## 模块路径
 
 ```
 github.com/arcane-craft/go-macro
-github.com/arcane-craft/go-macro/contrib
 github.com/arcane-craft/go-macro/examples
+github.com/arcane-craft/go-macro-contrib   # 独立仓库
+```
+
+### BREAKING：自 `go-macro/contrib` 迁移
+
+| 旧路径 | 新路径 |
+|--------|--------|
+| `github.com/arcane-craft/go-macro/contrib/inline` | `github.com/arcane-craft/go-macro-contrib/inline` |
+| `github.com/arcane-craft/go-macro/contrib/try` | `github.com/arcane-craft/go-macro-contrib/try` |
+| `github.com/arcane-craft/go-macro/contrib/register` | `github.com/arcane-craft/go-macro-contrib/register` |
+
+```bash
+go get github.com/arcane-craft/go-macro-contrib@v0.1.0
 ```
 
 宏展开可执行入口由**宏调用方项目**承载（`register` + `expandtool.Main()`）。本仓库 `examples` 为示例调用方工程；`examples/cmd/macroexpand` 为**推荐参考实现**（RECOMMENDED），非唯一路径。

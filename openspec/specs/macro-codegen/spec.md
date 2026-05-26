@@ -15,11 +15,11 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 （整模块可用 `./...`；按包展开用 `.`。）
 
-上述 RECOMMENDED 命令在本仓库中编译并运行 examples module 下的参考 `cmd/macroexpand`（其内部 blank import `contrib/register`）。宏使用方 MAY 将 generate 改为 `go run <本项目>/cmd/macroexpand` 等等价入口。
+上述 RECOMMENDED 命令在本仓库中编译并运行 examples module 下的参考 `cmd/macroexpand`（其内部 blank import `github.com/arcane-craft/go-macro-contrib/register`）。宏使用方 MAY 将 generate 改为 `go run <本项目>/cmd/macroexpand` 等等价入口。
 
 #### Scenario: generate 零项目 expand 文件
 
-- **WHEN** 用户仅使用 contrib 官方宏库，宏主文件含 RECOMMENDED 上述 generate（或等价自建入口的 generate），且项目内无 `tools/macroexpand`
+- **WHEN** 用户仅使用官方宏库（`go-macro-contrib`），宏主文件含 RECOMMENDED 上述 generate（或等价自建入口的 generate），且项目内无 `tools/macroexpand`
 - **THEN** `go generate` MUST 成功写回 `*_macro_gen.go`
 
 #### Scenario: 按包 generate
@@ -122,7 +122,7 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 ### Requirement: examples 参考 expand 入口（本仓库）
 
-本仓库 MUST 在 **examples** 子 module 提供参考实现 `cmd/macroexpand`（路径 `github.com/arcane-craft/go-macro/examples/cmd/macroexpand`）。该实现 MUST 仅 blank import 所需 `register` 包（含 `contrib/register`）并调用 `expandtool.Main()`，MUST NOT 包含其它业务逻辑。
+本仓库 MUST 在 **examples** 子 module 提供参考实现 `cmd/macroexpand`（路径 `github.com/arcane-craft/go-macro/examples/cmd/macroexpand`）。该实现 MUST 仅 blank import 所需 `register` 包（含 `github.com/arcane-craft/go-macro-contrib/register`）并调用 `expandtool.Main()`，MUST NOT 包含其它业务逻辑。
 
 根 module MUST NOT 包含 `cmd/macroexpand`（布局细节以 `macro-repo-layout` 为准）。
 
@@ -151,7 +151,7 @@ MUST NOT 生成 `tools/macroexpand` 或要求宏作者实现 expand main。READM
 
 ### Requirement: 消费第三方宏库的附录路径
 
-当宏使用方除 contrib 外还依赖其它带 `register` 子包的宏库时，文档 MAY 说明：复制 `examples/cmd/macroexpand` 为项目内 `cmd/macroexpand` 并**仅**追加 blank import 该宏库的 `register` 包，仍调用 `expandtool.Main()`。该路径 MUST NOT 作为默认快速上手内容。
+当宏使用方除 `go-macro-contrib` 外还依赖其它带 `register` 子包的宏库时，文档 MAY 说明：复制 `examples/cmd/macroexpand` 为项目内 `cmd/macroexpand` 并**仅**追加 blank import 该宏库的 `register` 包，仍调用 `expandtool.Main()`。该路径 MUST NOT 作为默认快速上手内容。
 
 #### Scenario: 附录不增加宏作者负担
 

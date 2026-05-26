@@ -1,8 +1,5 @@
-# macro-contrib Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change contrib-go-run-expand. Update Purpose after archive.
-## Requirements
 ### Requirement: contrib 独立子 module
 
 官方宏库 MUST 在**独立 Git 仓库**中作为根 Go module 发布，module 路径为 `github.com/arcane-craft/go-macro-contrib`。`go-macro` 仓库 MUST NOT 再包含 `contrib/` 目录。
@@ -55,6 +52,8 @@ TBD - created by archiving change contrib-go-run-expand. Update Purpose after ar
 - **WHEN** 在 `go-macro-contrib` 仓库根执行 `go test ./...`
 - **THEN** MUST 通过
 
+## ADDED Requirements
+
 ### Requirement: contrib 依赖 go-macro 核心版本
 
 `go-macro-contrib` 的 `go.mod` MUST `require` 已发布的 `github.com/arcane-craft/go-macro` 版本；README MUST 注明最低兼容核心版本。本地联调时仓库 SHOULD 位于 `go-macro` 同级目录 `../go-macro-contrib`，并 MAY 使用 `replace github.com/arcane-craft/go-macro => ../go-macro`。
@@ -63,4 +62,3 @@ TBD - created by archiving change contrib-go-run-expand. Update Purpose after ar
 
 - **WHEN** 在仅 clone `go-macro-contrib` 且已 `go get` 兼容的 `go-macro` 版本时执行 `go test ./...`
 - **THEN** MUST 成功解析 `github.com/arcane-craft/go-macro` 模块依赖
-

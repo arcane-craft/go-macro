@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/arcane-craft/go-macro/contrib/try"
+	"github.com/arcane-craft/go-macro-contrib/try"
 )
 
 // ReadFile reads hello.txt using the Try macro.

@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>migrate-contrib-new-repo · Spec Delta Viewer</title>
+<style>
+:root {
+  --bg: #0d1117; --surface: #161b22; --surface2: #1c2129;
+  --border: #30363d; --text: #e6edf3; --text-muted: #8b949e; --accent: #58a6ff;
+  --must: #f85149; --mustnot: #da3633; --should: #d29922; --may: #3fb950;
+  --when: #58a6ff; --then: #3fb950; --given: #d29922;
+  --added: #3fb950; --modified: #d29922;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.6; }
+a { color: var(--accent); text-decoration: none; }
+header.top { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,.95);
+  border-bottom: 1px solid var(--border); padding: 1rem 1.5rem; backdrop-filter: blur(8px); }
+header.top h1 { font-size: 1.25rem; margin-bottom: .25rem; }
+header.top .sub { color: var(--text-muted); font-size: .875rem; }
+.stats { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: .75rem; }
+.stat-pill { background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  padding: .35rem .75rem; font-size: .8rem; }
+.layout { display: flex; max-width: 1400px; margin: 0 auto; }
+.sidebar { width: 260px; flex-shrink: 0; position: sticky; top: 80px; height: calc(100vh - 80px);
+  overflow-y: auto; padding: 1rem; border-right: 1px solid var(--border); }
+.nav-cap { font-size: .7rem; text-transform: uppercase; color: var(--text-muted);
+  margin: 1rem 0 .35rem; letter-spacing: .05em; font-weight: 700; }
+.nav-cap:first-child { margin-top: 0; }
+.nav-req { display: block; font-size: .8rem; color: var(--text-muted); padding: .25rem .5rem;
+  border-left: 2px solid transparent; margin-bottom: 2px; }
+.nav-req:hover { color: var(--accent); border-left-color: var(--accent); }
+.main { flex: 1; padding: 1.5rem; min-width: 0; }
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; margin-bottom: 1.5rem; }
+.summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; text-align: center; }
+.summary-card .num { font-size: 1.75rem; font-weight: 700; color: var(--accent); }
+.summary-card .lbl { font-size: .75rem; color: var(--text-muted); }
+.legend { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.5rem; padding: .75rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; font-size: .75rem; }
+.legend span { padding: .2rem .5rem; border-radius: 4px; font-weight: 700; }
+.kw-must { color: var(--must); font-weight: 700; }
+.kw-mustnot { color: var(--mustnot); font-weight: 700; }
+.kw-should { color: var(--should); font-weight: 700; }
+.kw-may { color: var(--may); font-weight: 700; }
+.arch { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 1rem; margin-bottom: 1.5rem; overflow-x: auto; }
+.arch h3 { font-size: .9rem; margin-bottom: .75rem; color: var(--text-muted); }
+.migrate-table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-bottom: 1.5rem; }
+.migrate-table th, .migrate-table td { border: 1px solid var(--border); padding: .5rem .75rem; text-align: left; }
+.migrate-table th { background: var(--surface2); }
+.migrate-table code { color: #ffa657; }
+.cap-section { margin-bottom: 2.5rem; }
+.cap-title { font-size: 1.1rem; color: var(--accent); margin-bottom: 1rem; padding-bottom: .5rem;
+  border-bottom: 1px solid var(--border); }
+.req-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  margin-bottom: .75rem; overflow: hidden; transition: border-color .2s; }
+.req-card:hover { border-color: var(--accent); }
+.req-header { display: flex; align-items: center; gap: .5rem; padding: .75rem 1rem; cursor: pointer; user-select: none; }
+.req-num { width: 1.75rem; height: 1.75rem; border-radius: 50%; background: var(--surface2);
+  display: flex; align-items: center; justify-content: center; font-size: .75rem; font-weight: 700; color: var(--accent); flex-shrink: 0; }
+.req-title { flex: 1; font-weight: 600; font-size: .9rem; }
+.badge { font-size: .65rem; padding: .15rem .45rem; border-radius: 4px; font-weight: 700; text-transform: uppercase; }
+.badge-modified { background: rgba(210,153,34,.2); color: var(--should); border: 1px solid var(--should); }
+.badge-added { background: rgba(63,185,80,.15); color: var(--may); border: 1px solid var(--may); }
+.badge-sc { background: rgba(88,166,255,.15); color: var(--accent); border: 1px solid var(--accent); }
+.chevron { color: var(--text-muted); transition: transform .2s; }
+.req-card.open .chevron { transform: rotate(90deg); }
+.req-body { display: none; padding: 0 1rem 1rem; }
+.req-card.open .req-body { display: block; }
+.req-desc { background: var(--surface2); border-radius: 6px; padding: .75rem 1rem; margin-bottom: .75rem; font-size: .875rem; }
+.req-desc p { margin-bottom: .5rem; }
+.req-desc p:last-child { margin-bottom: 0; }
+code { background: rgba(110,118,129,.15); color: #ffa657; border-radius: 3px; padding: .1em .35em; font-size: .85em; }
+pre.code-block { background: #0d1117; border: 1px solid var(--border); border-radius: 6px;
+  padding: .75rem; overflow-x: auto; margin: .5rem 0; font-size: .8rem; }
+pre.code-block code { background: none; padding: 0; color: #e6edf3; }
+table { width: 100%; border-collapse: collapse; font-size: .8rem; margin: .5rem 0; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; }
+th { background: var(--surface2); }
+.scenario { border: 1px solid var(--border); border-radius: 6px; margin-bottom: .5rem; overflow: hidden; }
+.sc-title { background: var(--surface2); padding: .4rem .75rem; font-size: .8rem; font-weight: 600; }
+.step { display: flex; gap: .5rem; padding: .4rem .75rem; font-size: .8rem; border-top: 1px solid var(--border); align-items: flex-start; }
+.step-label { font-size: .65rem; font-weight: 700; padding: .15rem .4rem; border-radius: 3px; flex-shrink: 0; margin-top: .1rem; }
+.step-when .step-label { background: rgba(88,166,255,.2); color: var(--when); }
+.step-then .step-label { background: rgba(63,185,80,.2); color: var(--then); }
+.step-given .step-label { background: rgba(210,153,34,.2); color: var(--given); }
+@media (max-width: 800px) {
+  .sidebar { display: none; }
+  .layout { display: block; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>migrate-contrib-new-repo</h1>
+  <p class="sub">OpenSpec Spec Delta · contrib 迁入独立仓库 <code>github.com/arcane-craft/go-macro-contrib</code></p>
+  <div class="stats">
+    <span class="stat-pill">6 capabilities</span>
+    <span class="stat-pill">18 requirements</span>
+    <span class="stat-pill">27 scenarios</span>
+    <span class="stat-pill">本地路径 <code>../go-macro-contrib</code></span>
+  </div>
+</header>
+<div class="layout">
+<nav class="sidebar">
+  <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:.5rem">导航</div>
+  <div class="nav-cap">macro-codegen</div><a class="nav-req" href="#req-1">go generate 集成</a><a class="nav-req" href="#req-2">examples 参考 expand 入口（本仓库）</a><a class="nav-req" href="#req-3">消费第三方宏库的附录路径</a><div class="nav-cap">macro-contrib</div><a class="nav-req" href="#req-4">contrib 独立子 module</a><a class="nav-req" href="#req-5">官方宏库路径</a><a class="nav-req" href="#req-6">contrib/register 注册官方 Expander</a><a class="nav-req" href="#req-7">contrib 独立测试</a><a class="nav-req" href="#req-8">contrib 依赖 go-macro 核心版本</a><div class="nav-cap">macro-expander</div><a class="nav-req" href="#req-9">Provider 激活与 Expander 链接</a><div class="nav-cap">macro-repo-layout</div><a class="nav-req" href="#req-10">多 module 仓库布局</a><a class="nav-req" href="#req-11">调用方项目承载 expand 入口，examples 提供参考实现</a><a class="nav-req" href="#req-12">根 module 测试不依赖 contrib</a><a class="nav-req" href="#req-13">本地开发 workspace</a><a class="nav-req" href="#req-14">示例包路径</a><div class="nav-cap">syntax-inline</div><a class="nav-req" href="#req-15">可选官方宏库与引入方式</a><a class="nav-req" href="#req-16">mactest 单测</a><div class="nav-cap">syntax-try</div><a class="nav-req" href="#req-17">可选官方宏库与引入方式</a><a class="nav-req" href="#req-18">Try 端到端示例</a>
+</nav>
+<main class="main">
+  <div class="summary">
+    <div class="summary-card"><div class="num">18</div><div class="lbl">Requirements</div></div>
+    <div class="summary-card"><div class="num">27</div><div class="lbl">Scenarios</div></div>
+    <div class="summary-card"><div class="num">6</div><div class="lbl">Capabilities</div></div>
+    <div class="summary-card"><div class="num">1</div><div class="lbl">ADDED</div></div>
+    <div class="summary-card"><div class="num">17</div><div class="lbl">MODIFIED</div></div>
+  </div>
+  <div class="legend">
+    <span class="kw-must">MUST</span>
+    <span class="kw-mustnot">MUST NOT</span>
+    <span class="kw-should">SHOULD</span>
+    <span class="kw-may">MAY</span>
+    <span style="color:var(--when)">WHEN</span>
+    <span style="color:var(--then)">THEN</span>
+  </div>
+  <div class="arch">
+    <h3>仓库与依赖关系</h3>
+    <svg viewBox="0 0 720 280" width="100%" style="max-width:720px">
+      <defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#58a6ff"/></marker></defs>
+      <!-- go-macro box -->
+      <rect x="20" y="30" width="300" height="200" rx="8" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+      <text x="170" y="58" text-anchor="middle" fill="#58a6ff" font-size="14" font-weight="bold">go-macro</text>
+      <rect x="40" y="75" width="120" height="40" rx="4" fill="#1c2129" stroke="#30363d"/>
+      <text x="100" y="100" text-anchor="middle" fill="#e6edf3" font-size="11">根 module</text>
+      <text x="100" y="112" text-anchor="middle" fill="#8b949e" font-size="9">macro / expander</text>
+      <rect x="180" y="75" width="120" height="40" rx="4" fill="#1c2129" stroke="#30363d"/>
+      <text x="240" y="100" text-anchor="middle" fill="#e6edf3" font-size="11">examples/</text>
+      <text x="240" y="112" text-anchor="middle" fill="#8b949e" font-size="9">cmd/macroexpand</text>
+      <text x="170" y="155" text-anchor="middle" fill="#8b949e" font-size="10">go.work: . + ./examples</text>
+      <text x="170" y="175" text-anchor="middle" fill="#d29922" font-size="10">✗ 无 contrib/</text>
+      <text x="170" y="210" text-anchor="middle" fill="#8b949e" font-size="9">examples replace → ../go-macro-contrib</text>
+      <!-- go-macro-contrib box -->
+      <rect x="400" y="30" width="300" height="200" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
+      <text x="550" y="58" text-anchor="middle" fill="#3fb950" font-size="14" font-weight="bold">go-macro-contrib</text>
+      <text x="550" y="78" text-anchor="middle" fill="#8b949e" font-size="9">../go-macro-contrib</text>
+      <rect x="420" y="95" width="70" height="32" rx="4" fill="#1c2129" stroke="#30363d"/>
+      <text x="455" y="115" text-anchor="middle" fill="#e6edf3" font-size="10">inline/</text>
+      <rect x="500" y="95" width="70" height="32" rx="4" fill="#1c2129" stroke="#30363d"/>
+      <text x="535" y="115" text-anchor="middle" fill="#e6edf3" font-size="10">try/</text>
+      <rect x="580" y="95" width="100" height="32" rx="4" fill="#1c2129" stroke="#30363d"/>
+      <text x="630" y="115" text-anchor="middle" fill="#e6edf3" font-size="10">register/</text>
+      <text x="550" y="160" text-anchor="middle" fill="#8b949e" font-size="10">module: github.com/arcane-craft/go-macro-contrib</text>
+      <text x="550" y="185" text-anchor="middle" fill="#8b949e" font-size="9">replace go-macro => ../go-macro</text>
+      <!-- arrows -->
+      <line x1="320" y1="120" x2="395" y2="120" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="358" y="112" text-anchor="middle" fill="#8b949e" font-size="8">require</text>
+      <line x1="400" y1="200" x2="320" y2="200" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="360" y="192" text-anchor="middle" fill="#8b949e" font-size="8">depend on core</text>
+      <text x="360" y="250" text-anchor="middle" fill="#f85149" font-size="11" font-weight="bold">BREAKING: import 路径全部迁移</text>
+    </svg>
+  </div>
+  <table class="migrate-table">
+    <thead><tr><th>包</th><th>旧路径</th><th>新路径</th></tr></thead>
+    <tbody>
+      <tr><td>inline</td><td><code>.../go-macro/contrib/inline</code></td><td><code>.../go-macro-contrib/inline</code></td></tr>
+      <tr><td>try</td><td><code>.../go-macro/contrib/try</code></td><td><code>.../go-macro-contrib/try</code></td></tr>
+      <tr><td>register</td><td><code>.../go-macro/contrib/register</code></td><td><code>.../go-macro-contrib/register</code></td></tr>
+    </tbody>
+  </table>
+  <section class="cap-section" id="cap-macro-codegen"><h2 class="cap-title">macro-codegen</h2>
+<article class="req-card open" id="req-1">
+  <header class="req-header">
+    <span class="req-num">1</span>
+    <span class="req-title">go generate 集成</span>
+    <span class="badge badge-modified">MODIFIED</span>
+    <span class="badge badge-sc">2 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p>工具链 <span class="kw-must">MUST</span> 支持在宏主文件中通过**一行** generate 触发 expand，**无需**用户项目内 <code>tools/macroexpand</code>。触发的 expand 进程 <span class="kw-must">MUST</span> 通过 blank import 所需 <code>register</code> 包并调用 <code>macro/expandtool.Main()</code>（或与 <code>Run</code> 等价的接线模式）。</p>
+<p>文档与快速上手 **<span class="kw-should">RECOMMENDED</span>** 使用：</p>
+<pre class="code-block"><code>//go:generate go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .</code></pre>
+<p>（整模块可用 <code>./...</code>；按包展开用 <code>.</code>。）</p>
+<p>上述 <span class="kw-should">RECOMMENDED</span> 命令在本仓库中编译并运行 examples module 下的参考 <code>cmd/macroexpand</code>（其内部 blank import <code>github.com/arcane-craft/go-macro-contrib/register</code>）。宏使用方 <span class="kw-may">MAY</span> 将 generate 改为 <code>go run &lt;本项目&gt;/cmd/macroexpand</code> 等等价入口。</p></div>
+    <div class="scenario"><div class="sc-title">▶ generate 零项目 expand 文件</div><div class="step step-when"><span class="step-label">WHEN</span><span>用户仅使用官方宏库（<code>go-macro-contrib</code>），宏主文件含 <span class="kw-should">RECOMMENDED</span> 上述 generate（或等价自建入口的 generate），且项目内无 <code>tools/macroexpand</code></span></div><div class="step step-then"><span class="step-label">THEN</span><span><code>go generate</code> <span class="kw-must">MUST</span> 成功写回 <code>*_macro_gen.go</code></span></div></div><div class="scenario"><div class="sc-title">▶ 按包 generate</div><div class="step step-when"><span class="step-label">WHEN</span><span>宏主文件含 <code>//go:generate go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .</code>（或指向本项目等价入口的 generate）</span></div><div class="step step-then"><span class="step-label">THEN</span><span><span class="kw-must">MUST</span> 仅展开该 generate 所在包（或指令指定的 patterns）</span></div></div>
+  </div>
+</article>
+<article class="req-card" id="req-2">
+  <header class="req-header">
+    <span class="req-num">2</span>
+    <span class="req-title">examples 参考 expand 入口（本仓库）</span>
+    <span class="badge badge-modified">MODIFIED</span>
+    <span class="badge badge-sc">2 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p>本仓库 <span class="kw-must">MUST</span> 在 **examples** 子 module 提供参考实现 <code>cmd/macroexpand</code>（路径 <code>github.com/arcane-craft/go-macro/examples/cmd/macroexpand</code>）。该实现 <span class="kw-must">MUST</span> 仅 blank import 所需 <code>register</code> 包（含 <code>github.com/arcane-craft/go-macro-contrib/register</code>）并调用 <code>expandtool.Main()</code>，<span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 包含其它业务逻辑。</p>
+<p>根 module <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 包含 <code>cmd/macroexpand</code>（布局细节以 <code>macro-repo-layout</code> 为准）。</p>
+<p>该路径为宏使用方 **<span class="kw-should">RECOMMENDED</span>** 快速上手命令，<span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 被解释为唯一允许的 expand 入口。</p></div>
+    <div class="scenario"><div class="sc-title">▶ 参考入口与 expandtool Main 等价</div><div class="step step-when"><span class="step-label">WHEN</span><span>用户 <code>go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .</code> 且进程已 link 所需 <code>register</code></span></div><div class="step step-then"><span class="step-label">THEN</span><span>行为 <span class="kw-must">MUST</span> 与在同一进程内调用 <code>expandtool.Main()</code> 一致</span></div></div><div class="scenario"><div class="sc-title">▶ 调用方自建等价入口</div><div class="step step-when"><span class="step-label">WHEN</span><span>宏使用方在项目内提供等价 <code>cmd/macroexpand</code>（blank import 所需 register 并调用 <code>expandtool.Main()</code>）</span></div><div class="step step-then"><span class="step-label">THEN</span><span>expand 行为 <span class="kw-must">MUST</span> 与使用本仓库 examples 参考入口等价（就 expand 语义而言）</span></div></div>
+  </div>
+</article>
+<article class="req-card" id="req-3">
+  <header class="req-header">
+    <span class="req-num">3</span>
+    <span class="req-title">消费第三方宏库的附录路径</span>
+    <span class="badge badge-modified">MODIFIED</span>
+    <span class="badge badge-sc">1 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p>当宏使用方除 <code>go-macro-contrib</code> 外还依赖其它带 <code>register</code> 子包的宏库时，文档 <span class="kw-may">MAY</span> 说明：复制 <code>examples/cmd/macroexpand</code> 为项目内 <code>cmd/macroexpand</code> 并**仅**追加 blank import 该宏库的 <code>register</code> 包，仍调用 <code>expandtool.Main()</code>。该路径 <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 作为默认快速上手内容。</p></div>
+    <div class="scenario"><div class="sc-title">▶ 附录不增加宏作者负担</div><div class="step step-when"><span class="step-label">WHEN</span><span>第三方宏作者按脚手架发布 <code>register</code> 子包</span></div><div class="step step-then"><span class="step-label">THEN</span><span>宏作者 <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 需要维护 expand 二进制；链接责任在使用方可选 cmd 或未来框架扩展</span></div></div>
+  </div>
+</article></section><section class="cap-section" id="cap-macro-contrib"><h2 class="cap-title">macro-contrib</h2>
+<article class="req-card" id="req-4">
+  <header class="req-header">
+    <span class="req-num">4</span>
+    <span class="req-title">contrib 独立子 module</span>
+    <span class="badge badge-modified">MODIFIED</span>
+    <span class="badge badge-sc">2 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p>官方宏库 <span class="kw-must">MUST</span> 在**独立 Git 仓库**中作为根 Go module 发布，module 路径为 <code>github.com/arcane-craft/go-macro-contrib</code>。<code>go-macro</code> 仓库 <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 再包含 <code>contrib/</code> 目录。</p>
+<p><code>go-macro</code> 根 module 的 <code>internal/expander</code>、<code>macro/expandtool</code> 及根 module 内所有测试 <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> import 官方宏实现包（<code>inline</code>、<code>try</code>、<code>register</code>）。</p></div>
+    <div class="scenario"><div class="sc-title">▶ expander 不依赖 contrib 实现</div><div class="step step-when"><span class="step-label">WHEN</span><span>编译 <code>go-macro</code> 根 module 的 <code>internal/expander</code> 包</span></div><div class="step step-then"><span class="step-label">THEN</span><span><span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> import <code>github.com/arcane-craft/go-macro-contrib/inline</code> 或 <code>.../try</code></span></div></div><div class="scenario"><div class="sc-title">▶ 根测试不 import contrib</div><div class="step step-when"><span class="step-label">WHEN</span><span>编译 <code>go-macro</code> 根 module 任意 <code>*_test.go</code></span></div><div class="step step-then"><span class="step-label">THEN</span><span><span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> import <code>github.com/arcane-craft/go-macro-contrib/...</code></span></div></div>
+  </div>
+</article>
+<article class="req-card" id="req-5">
+  <header class="req-header">
+    <span class="req-num">5</span>
+    <span class="req-title">官方宏库路径</span>
+    <span class="badge badge-modified">MODIFIED</span>
+    <span class="badge badge-sc">1 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p>官方宏库 <span class="kw-must">MUST</span> 仅通过下列 import 路径提供：</p>
+<p>- <code>github.com/arcane-craft/go-macro-contrib/inline</code></p>
+<p>- <code>github.com/arcane-craft/go-macro-contrib/try</code></p>
+<p><code>go-macro</code> 根 module <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 再包含 <code>inline/</code>、<code>try/</code> 或 <code>contrib/</code>。</p></div>
+    <div class="scenario"><div class="sc-title">▶ import 新路径</div><div class="step step-when"><span class="step-label">WHEN</span><span>宏主文件 import <code>github.com/arcane-craft/go-macro-contrib/try</code></span></div><div class="step step-then"><span class="step-label">THEN</span><span><span class="kw-must">MUST</span> 解析到 <code>go-macro-contrib</code> 仓库的 <code>try</code> 包</span></div></div>
+  </div>
+</article>
+<article class="req-card" id="req-6">
+  <header class="req-header">
+    <span class="req-num">6</span>
+    <span class="req-title">contrib/register 注册官方 Expander</span>
+    <span class="badge badge-modified">MODIFIED</span>
+    <span class="badge badge-sc">1 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p><code>go-macro-contrib</code> <span class="kw-must">MUST</span> 提供 <code>register</code> 包，在其 <code>init</code> 中调用 <code>macro/expandtool.Register</code>，注册 <code>.../inline</code> 与 <code>.../try</code> 的 import path 及对应 <code>InlineExpand</code>、<code>TryExpand</code>。</p>
+<p><code>go-macro</code> 仓库 **examples** module 内的参考 <code>cmd/macroexpand</code> <span class="kw-must">MUST</span> 通过 blank import <code>_ &quot;github.com/arcane-craft/go-macro-contrib/register&quot;</code> 启用官方宏库 link。宏使用方在项目内自建等价 <code>cmd/macroexpand</code> 时 <span class="kw-may">MAY</span> blank import 同一 <code>register</code>（及所需其它宏库 <code>register</code> 包）。<code>go-macro-contrib</code> <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 在 <code>go-macro</code> 根 module 的 <code>go.mod</code> 中被 require。</p>
+<p><code>go-macro-contrib</code> <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 提供 <code>Main</code>/<code>Run</code> 作为用户 expand 入口（该职责在 <code>macro/expandtool</code>；可执行入口由宏调用方项目承载）。</p></div>
+    <div class="scenario"><div class="sc-title">▶ blank import 后 Registered 含官方库</div><div class="step step-when"><span class="step-label">WHEN</span><span>进程 blank import <code>github.com/arcane-craft/go-macro-contrib/register</code></span></div><div class="step step-then"><span class="step-label">THEN</span><span><code>expandtool.Registered()</code> <span class="kw-must">MUST</span> 包含 inline 与 try 的 import path 条目</span></div></div>
+  </div>
+</article>
+<article class="req-card" id="req-7">
+  <header class="req-header">
+    <span class="req-num">7</span>
+    <span class="req-title">contrib 独立测试</span>
+    <span class="badge badge-modified">MODIFIED</span>
+    <span class="badge badge-sc">1 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p><code>go-macro-contrib</code> 仓库 <span class="kw-must">MUST</span> 具备独立 <code>go test ./...</code>，含 inline/try 的 mactest 单测。</p></div>
+    <div class="scenario"><div class="sc-title">▶ contrib 测试不依赖 go tool macro expand</div><div class="step step-when"><span class="step-label">WHEN</span><span>在 <code>go-macro-contrib</code> 仓库根执行 <code>go test ./...</code></span></div><div class="step step-then"><span class="step-label">THEN</span><span><span class="kw-must">MUST</span> 通过</span></div></div>
+  </div>
+</article>
+<article class="req-card" id="req-8">
+  <header class="req-header">
+    <span class="req-num">8</span>
+    <span class="req-title">contrib 依赖 go-macro 核心版本</span>
+    <span class="badge badge-added">ADDED</span>
+    <span class="badge badge-sc">1 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p><code>go-macro-contrib</code> 的 <code>go.mod</code> <span class="kw-must">MUST</span> <code>require</code> 已发布的 <code>github.com/arcane-craft/go-macro</code> 版本；README <span class="kw-must">MUST</span> 注明最低兼容核心版本。本地联调时仓库 <span class="kw-should">SHOULD</span> 位于 <code>go-macro</code> 同级目录 <code>../go-macro-contrib</code>，并 <span class="kw-may">MAY</span> 使用 <code>replace github.com/arcane-craft/go-macro =&gt; ../go-macro</code>。</p></div>
+    <div class="scenario"><div class="sc-title">▶ 独立仓可解析核心依赖</div><div class="step step-when"><span class="step-label">WHEN</span><span>在仅 clone <code>go-macro-contrib</code> 且已 <code>go get</code> 兼容的 <code>go-macro</code> 版本时执行 <code>go test ./...</code></span></div><div class="step step-then"><span class="step-label">THEN</span><span><span class="kw-must">MUST</span> 成功解析 <code>github.com/arcane-craft/go-macro</code> 模块依赖</span></div></div>
+  </div>
+</article></section><section class="cap-section" id="cap-macro-expander"><h2 class="cap-title">macro-expander</h2>
+<article class="req-card" id="req-9">
+  <header class="req-header">
+    <span class="req-num">9</span>
+    <span class="req-title">Provider 激活与 Expander 链接</span>
+    <span class="badge badge-modified">MODIFIED</span>
+    <span class="badge badge-sc">3 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p><code>ExpandPackages(patterns, linked map[string]macro.Expander)</code> <span class="kw-must">MUST</span> 对每个待展开包：</p>
+<p>1. 收集宏主文件所在包的 **import 路径集合**；</p>
+<p>2. 取 **<code>linked</code> 的 key 与 import 集合的交集** 为候选宏库路径；</p>
+<p>3. 对每个候选路径：解析 provider AST（含 <code>//macro:</code>）、注册 panic 桩，并绑定 <code>linked[path]</code> 的 <code>Expander</code>。</p>
+<p>引擎 <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 维护官方宏库目录，<span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 在识别或 splice 逻辑中对任何 <code>syntax-id</code> 硬编码分支。</p>
+<p><code>go-macro</code> 根 module 的 <code>internal/expander</code> 包及其测试 <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> import <code>go-macro-contrib</code>。对外展开入口为 <code>macro/expandtool</code>（不导出 expander 包路径给宏使用方）。</p></div>
+    <div class="scenario"><div class="sc-title">▶ 未 import 的宏库不 link</div><div class="step step-when"><span class="step-label">WHEN</span><span><code>linked</code> 含 <code>github.com/arcane-craft/go-macro-contrib/try</code>，但宏主文件未 import 该 path</span></div><div class="step step-then"><span class="step-label">THEN</span><span>该包展开时 <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 注册 <code>syntax-try</code></span></div></div><div class="scenario"><div class="sc-title">▶ 已 import 但未 link 则展开失败</div><div class="step step-when"><span class="step-label">WHEN</span><span>宏主文件 import <code>github.com/arcane-craft/go-macro-contrib/try</code> 并调用 <code>Try(...)</code>，但 expand 工具传入的 <code>linked</code> 为空或不包含该 path</span></div><div class="step step-then"><span class="step-label">THEN</span><span>展开 <span class="kw-must">MUST</span> 失败（未知 stub 或未注册），且 <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 静默跳过</span></div></div><div class="scenario"><div class="sc-title">▶ 仅 link 已 import 的子集</div><div class="step step-when"><span class="step-label">WHEN</span><span>宏主文件 import <code>github.com/arcane-craft/go-macro-contrib/inline</code> 与 <code>.../try</code>，但 <code>linked</code> 仅含 <code>.../inline</code></span></div><div class="step step-then"><span class="step-label">THEN</span><span>该包 <span class="kw-must">MUST</span> 仅注册 <code>syntax-inline</code>；对 <code>Try(...)</code> 调用 <span class="kw-must">MUST</span> 展开失败</span></div></div>
+  </div>
+</article></section><section class="cap-section" id="cap-macro-repo-layout"><h2 class="cap-title">macro-repo-layout</h2>
+<article class="req-card" id="req-10">
+  <header class="req-header">
+    <span class="req-num">10</span>
+    <span class="req-title">多 module 仓库布局</span>
+    <span class="badge badge-modified">MODIFIED</span>
+    <span class="badge badge-sc">1 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p><code>go-macro</code> 仓库 <span class="kw-must">MUST</span> 以两个独立 Go module 组织，路径如下：</p>
+<p>官方宏库（<code>inline</code>、<code>try</code>、<code>register</code>）<span class="kw-must">MUST</span> 位于独立仓库 <code>github.com/arcane-craft/go-macro-contrib</code>，不在本仓库目录树内。</p>
+<p>根 module <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 再包含顶层 <code>inline/</code>、<code>try/</code>、<code>contrib/</code> 或根级 <code>cmd/macroexpand/</code>。</p><table><thead><tr><th>目录</th><th>module 路径</th><th>职责</th></tr></thead><tbody><tr><td>仓库根</td><td><code>github.com/arcane-craft/go-macro</code></td><td>核心库：<code>macro/</code>、<code>internal/expander/</code>、<code>internal/codegen/</code> 等；<code>cmd/macro</code>（仅 <code>init provider</code>）</td></tr><tr><td><code>examples/</code></td><td><code>github.com/arcane-craft/go-macro/examples</code></td><td>示例宏调用方工程；包含参考 <code>cmd/macroexpand/</code> 接线实现</td></tr></tbody></table></div>
+    <div class="scenario"><div class="sc-title">▶ 根 module 仅承载框架库</div><div class="step step-when"><span class="step-label">WHEN</span><span>查看 <code>go-macro</code> 根目录 <code>go.mod</code></span></div><div class="step step-then"><span class="step-label">THEN</span><span><span class="kw-must">MUST</span> 仅 <code>require</code> 核心构建所需依赖（如 <code>golang.org/x/tools</code>），<span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> <code>require github.com/arcane-craft/go-macro-contrib</code></span></div></div>
+  </div>
+</article>
+<article class="req-card" id="req-11">
+  <header class="req-header">
+    <span class="req-num">11</span>
+    <span class="req-title">调用方项目承载 expand 入口，examples 提供参考实现</span>
+    <span class="badge badge-modified">MODIFIED</span>
+    <span class="badge badge-sc">2 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p>宏展开入口 <span class="kw-must">MUST</span> 由宏调用方项目承载（如项目内 <code>cmd/macroexpand</code>），并且实现 <span class="kw-must">MUST</span> 通过 blank import 所需 <code>register</code> 包后调用 <code>expandtool.Main()</code>（或与 <code>Run</code> 等价的接线模式）。</p>
+<p><code>examples/cmd/macroexpand</code> <span class="kw-must">MUST</span> 作为参考实现存在于 examples module；其路径 <code>github.com/arcane-craft/go-macro/examples/cmd/macroexpand</code> 为 <span class="kw-should">RECOMMENDED</span> 默认用法，但 <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 被解释为唯一允许路径。</p>
+<p>官方宏库依赖 <span class="kw-must">MUST</span> 落在调用方工程 module（例如 examples）与 <code>go-macro-contrib</code> module，而非 <code>go-macro</code> 根 module。</p>
+<p>宏使用方推荐 generate 一行：</p>
+<pre class="code-block"><code>//go:generate go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .</code></pre></div>
+    <div class="scenario"><div class="sc-title">▶ 使用 examples 参考入口</div><div class="step step-when"><span class="step-label">WHEN</span><span>用户于宏主文件所在 module 执行 <code>go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .</code></span></div><div class="step step-then"><span class="step-label">THEN</span><span><span class="kw-must">MUST</span> 编译 examples 下参考入口并成功展开已 import 且已 link 的宏</span></div></div><div class="scenario"><div class="sc-title">▶ 使用调用方自建入口</div><div class="step step-when"><span class="step-label">WHEN</span><span>用户在自身项目内实现等价 <code>cmd/macroexpand</code>（blank import register 并调用 <code>expandtool.Main()</code>）</span></div><div class="step step-then"><span class="step-label">THEN</span><span><span class="kw-must">MUST</span> 在行为上与参考入口等价，并成功展开已 import 且已 link 的宏</span></div></div>
+  </div>
+</article>
+<article class="req-card" id="req-12">
+  <header class="req-header">
+    <span class="req-num">12</span>
+    <span class="req-title">根 module 测试不依赖 contrib</span>
+    <span class="badge badge-modified">MODIFIED</span>
+    <span class="badge badge-sc">2 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p><code>go-macro</code> 根 module 内所有 <code>*_test.go</code> <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> import <code>github.com/arcane-craft/go-macro-contrib/...</code> 任何包（含 <code>inline</code>、<code>try</code>、<code>register</code>）。</p>
+<p>依赖真实 <code>TryExpand</code> / <code>InlineExpand</code> 的宏库单测在 <code>go-macro-contrib</code> 仓库；<code>examples</code> 仅保留示例包内 golden 等轻量测试（不强制 module 级 expand 集成测试）。</p></div>
+    <div class="scenario"><div class="sc-title">▶ 根 go test 无 contrib 边</div><div class="step step-when"><span class="step-label">WHEN</span><span>于 <code>go-macro</code> 仓库根执行 <code>GOWORK=off go test ./...</code></span></div><div class="step step-then"><span class="step-label">THEN</span><span><span class="kw-must">MUST</span> 通过且根 <code>go.mod</code> <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 因测试而引入 <code>go-macro-contrib</code> require</span></div></div><div class="scenario"><div class="sc-title">▶ examples 轻量测试</div><div class="step step-when"><span class="step-label">WHEN</span><span>在 <code>go-macro</code> 的 <code>examples</code> 目录执行 <code>go test ./...</code>（examples <code>go.mod</code> 已 require 兼容版本的 <code>go-macro-contrib</code>）</span></div><div class="step step-then"><span class="step-label">THEN</span><span><span class="kw-must">MUST</span> 通过（含 <code>readfile</code> 对已提交 <code>*_macro_gen.go</code> 的 golden 校验等）</span></div></div>
+  </div>
+</article>
+<article class="req-card" id="req-13">
+  <header class="req-header">
+    <span class="req-num">13</span>
+    <span class="req-title">本地开发 workspace</span>
+    <span class="badge badge-modified">MODIFIED</span>
+    <span class="badge badge-sc">1 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p><code>go-macro</code> 仓库根 <span class="kw-must">MUST</span> 提供 <code>go.work</code>，且 <code>use</code> <span class="kw-must">MUST</span> 至少包含根 module 与 <code>./examples</code>，以便本仓联调。</p>
+<p>对 <code>go-macro-contrib</code> 的本地并行开发，<code>examples/go.mod</code> <span class="kw-should">SHOULD</span> 使用 <code>replace github.com/arcane-craft/go-macro-contrib =&gt; ../go-macro-contrib</code>（新仓 checkout 位于 <code>go-macro</code> 仓库根的同级目录 <code>../go-macro-contrib</code>）。</p></div>
+    <div class="scenario"><div class="sc-title">▶ workspace 联调本仓两 module</div><div class="step step-when"><span class="step-label">WHEN</span><span>开发者在 <code>go-macro</code> 仓库根执行 <code>go test ./...</code>（默认启用 <code>go.work</code>）</span></div><div class="step step-then"><span class="step-label">THEN</span><span><span class="kw-must">MUST</span> 能同时测试根 module 与 examples module</span></div></div>
+  </div>
+</article>
+<article class="req-card" id="req-14">
+  <header class="req-header">
+    <span class="req-num">14</span>
+    <span class="req-title">示例包路径</span>
+    <span class="badge badge-modified">MODIFIED</span>
+    <span class="badge badge-sc">1 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p><code>examples/readfile</code> 包路径 <span class="kw-must">MUST</span> 为 <code>github.com/arcane-craft/go-macro/examples/readfile</code>（属于 examples module）。示例宏主文件 <span class="kw-must">MUST</span> import <code>github.com/arcane-craft/go-macro-contrib/try</code>（或所需官方库）并使用 examples module 下的 macroexpand generate。</p></div>
+    <div class="scenario"><div class="sc-title">▶ readfile 示例路径</div><div class="step step-when"><span class="step-label">WHEN</span><span>expander 或 examples 测试加载 readfile</span></div><div class="step step-then"><span class="step-label">THEN</span><span>包路径 <span class="kw-must">MUST</span> 为 <code>github.com/arcane-craft/go-macro/examples/readfile</code></span></div></div>
+  </div>
+</article></section><section class="cap-section" id="cap-syntax-inline"><h2 class="cap-title">syntax-inline</h2>
+<article class="req-card" id="req-15">
+  <header class="req-header">
+    <span class="req-num">15</span>
+    <span class="req-title">可选官方宏库与引入方式</span>
+    <span class="badge badge-modified">MODIFIED</span>
+    <span class="badge badge-sc">2 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p><code>inline</code> 包 <span class="kw-must">MUST</span> 在 <code>go-macro-contrib</code> 仓库内作为官方宏库发布，路径为 <code>github.com/arcane-craft/go-macro-contrib/inline</code>。使用方 <span class="kw-must">MUST</span> 在宏主文件中 import 该路径，且 expand 工具的 <code>linked</code> map <span class="kw-must">MUST</span> 包含该 import path 与 <code>InlineExpand</code>，方可展开 <code>Inline(...)</code>。</p></div>
+    <div class="scenario"><div class="sc-title">▶ 未 import 时不展开</div><div class="step step-when"><span class="step-label">WHEN</span><span>宏主文件调用 <code>Inline(...)</code> 但未 import <code>github.com/arcane-craft/go-macro-contrib/inline</code></span></div><div class="step step-then"><span class="step-label">THEN</span><span>展开管线 <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 注册 <code>syntax-inline</code></span></div></div><div class="scenario"><div class="sc-title">▶ import 但未 link 时不展开</div><div class="step step-when"><span class="step-label">WHEN</span><span>宏主文件 import <code>github.com/arcane-craft/go-macro-contrib/inline</code>，但 expand 工具 <code>linked</code> 未含该 path</span></div><div class="step step-then"><span class="step-label">THEN</span><span>对 <code>Inline(...)</code> 的调用 <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 被展开</span></div></div>
+  </div>
+</article>
+<article class="req-card" id="req-16">
+  <header class="req-header">
+    <span class="req-num">16</span>
+    <span class="req-title">mactest 单测</span>
+    <span class="badge badge-modified">MODIFIED</span>
+    <span class="badge badge-sc">1 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p><code>InlineExpand</code> <span class="kw-must">MUST</span> 具备不依赖 <code>//go:build macro</code> 的 <code>mactest</code> 单测，测试包路径 <span class="kw-must">MUST</span> 为 <code>go-macro-contrib</code> 仓库内的 <code>inline</code>（或 <code>inline_test</code>）。</p></div>
+    <div class="scenario"><div class="sc-title">▶ 纯 Expand 测试</div><div class="step step-when"><span class="step-label">WHEN</span><span>在 <code>go-macro-contrib</code> 仓库内执行 <code>go test ./inline/...</code></span></div><div class="step step-then"><span class="step-label">THEN</span><span>测试 <span class="kw-must">MUST</span> 无需全链路 expand 即可通过</span></div></div>
+  </div>
+</article></section><section class="cap-section" id="cap-syntax-try"><h2 class="cap-title">syntax-try</h2>
+<article class="req-card" id="req-17">
+  <header class="req-header">
+    <span class="req-num">17</span>
+    <span class="req-title">可选官方宏库与引入方式</span>
+    <span class="badge badge-modified">MODIFIED</span>
+    <span class="badge badge-sc">2 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p><code>try</code> 包 <span class="kw-must">MUST</span> 在 <code>go-macro-contrib</code> 仓库内作为官方宏库发布，路径为 <code>github.com/arcane-craft/go-macro-contrib/try</code>。使用方 <span class="kw-must">MUST</span> 在宏主文件中 import 该路径，且 expand 工具的 <code>linked</code> map <span class="kw-must">MUST</span> 包含该 import path 与 <code>TryExpand</code>，方可展开 <code>Try</code> 族调用。</p></div>
+    <div class="scenario"><div class="sc-title">▶ 未 import 时不展开</div><div class="step step-when"><span class="step-label">WHEN</span><span>宏主文件使用 <code>Try(...)</code> 但未 import <code>github.com/arcane-craft/go-macro-contrib/try</code></span></div><div class="step step-then"><span class="step-label">THEN</span><span>展开管线 <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 注册 <code>syntax-try</code></span></div></div><div class="scenario"><div class="sc-title">▶ import 但未 link 时不展开</div><div class="step step-when"><span class="step-label">WHEN</span><span>宏主文件 import <code>github.com/arcane-craft/go-macro-contrib/try</code>，但 expand 工具 <code>linked</code> 未含该 path</span></div><div class="step step-then"><span class="step-label">THEN</span><span>对 <code>Try(...)</code> 的调用 <span class="kw-mustnot"><span class="kw-must">MUST</span> NOT</span> 被展开</span></div></div>
+  </div>
+</article>
+<article class="req-card" id="req-18">
+  <header class="req-header">
+    <span class="req-num">18</span>
+    <span class="req-title">Try 端到端示例</span>
+    <span class="badge badge-modified">MODIFIED</span>
+    <span class="badge badge-sc">1 scenarios</span>
+    <span class="chevron">▸</span>
+  </header>
+  <div class="req-body">
+    <div class="req-desc"><p>仓库 <span class="kw-must">MUST</span> 在 **examples module** 包含 <code>readfile</code> 示例（<code>Try</code> 用于 k=1），包路径 <code>github.com/arcane-craft/go-macro/examples/readfile</code>。示例 <span class="kw-must">MUST</span> import <code>github.com/arcane-craft/go-macro-contrib/try</code>，经 <code>go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand</code> generate 后 <code>go test</code> 与 golden 一致。</p></div>
+    <div class="scenario"><div class="sc-title">▶ ReadFile 黄金测试</div><div class="step step-when"><span class="step-label">WHEN</span><span>在 <code>examples/readfile</code> 执行 <code>go test</code>（对照已提交的 <code>readfile_macro_gen.go</code> 与 golden）</span></div><div class="step step-then"><span class="step-label">THEN</span><span>测试 <span class="kw-must">MUST</span> 通过且 golden 匹配</span></div></div>
+  </div>
+</article></section>
+</main>
+</div>
+<script>
+(function () {
+  function bindToggle() {
+    document.querySelectorAll('.req-card .req-header').forEach(function (header) {
+      header.addEventListener('click', function (e) {
+        e.preventDefault();
+        var card = header.closest('.req-card');
+        if (card) card.classList.toggle('open');
+      });
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindToggle);
+  } else {
+    bindToggle();
+  }
+})();
+</script>
+</body>
+</html>

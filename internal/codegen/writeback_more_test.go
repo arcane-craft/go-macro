@@ -52,7 +52,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/arcane-craft/go-macro/contrib/try"
+	"github.com/arcane-craft/go-macro-contrib/try"
 )
 
 func F() error {
@@ -69,7 +69,7 @@ func F() error {
 	}
 	// Drop try import to exercise filterUnusedImports.
 	file.Imports = append(file.Imports, &ast.ImportSpec{
-		Path: &ast.BasicLit{Kind: token.STRING, Value: `"github.com/arcane-craft/go-macro/contrib/try"`},
+		Path: &ast.BasicLit{Kind: token.STRING, Value: `"github.com/arcane-craft/go-macro-contrib/try"`},
 	})
 	filterUnusedImports(file)
 	if err := WriteGenFile(mainPath, "!macro", fset, file); err != nil {
