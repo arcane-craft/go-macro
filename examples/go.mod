@@ -14,3 +14,5 @@ require (
 )
 
 replace github.com/arcane-craft/go-macro => ../
+
+replace github.com/arcane-craft/go-macro-contrib => ../../go-macro-contrib

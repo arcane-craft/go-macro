@@ -62,13 +62,13 @@
 `宏使用方` MUST 包含且保持与 `macro-codegen`、`macro-repo-layout` 一致的下列语义（正文 MAY 使用「主文件 + 生成文件」等自然语言，不必出现「方案 C」字样）：
 
 - 主文件 `//go:build macro`、生成侧 `//go:build !macro`、工具不修改主文件 build tag、生成代码含 `//line` 指向宏主文件
-- expand 入口由宏使用方项目承载（blank import `register` + `expandtool.Main()`）；`examples/cmd/macroexpand` 为推荐参考实现，非框架内置唯一工具
+- expand 入口 RECOMMENDED 为 `go run github.com/arcane-craft/go-macro/cmd/macro@latest expand`（或 generate 一行），无需自建 `cmd/macroexpand`
 - 对外发布建议：expand、`go test`（无 `-tags macro`）、提交 `*_macro_gen.go`、可选 CI `git diff --exit-code`
 
 #### Scenario: expand 入口与 examples 定位清晰
 
 - **WHEN** 读者阅读 `宏使用方` 中 expand 入口说明
-- **THEN** MUST 理解 expand 入口由使用宏的项目自建，且 MAY 对照 `examples/cmd/macroexpand` 作为示例
+- **THEN** MUST 理解 expand 入口默认由 `cmd/macro expand` 提供，且无需维护 `cmd/macroexpand` 代码
 
 ### Requirement: 参考内容与主路径分离
 

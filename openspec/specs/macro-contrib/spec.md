@@ -33,18 +33,16 @@ TBD - created by archiving change contrib-go-run-expand. Update Purpose after ar
 - **WHEN** 宏主文件 import `github.com/arcane-craft/go-macro-contrib/try`
 - **THEN** MUST 解析到 `go-macro-contrib` 仓库的 `try` 包
 
-### Requirement: contrib/register 注册官方 Expander
+### Requirement: 官方宏库与 cmd/macro expand 集成
 
-`go-macro-contrib` MUST 提供 `register` 包，在其 `init` 中调用 `macro/expandtool.Register`，注册 `.../inline` 与 `.../try` 的 import path 及对应 `InlineExpand`、`TryExpand`。
+`go-macro-contrib` MUST NOT 提供 `register` 包。官方宏库（`inline`、`try`）应由 `cmd/macro expand` 基于 provider 上的 `//macro:` 指令自动发现并链接。
 
-`go-macro` 仓库 **examples** module 内的参考 `cmd/macroexpand` MUST 通过 blank import `_ "github.com/arcane-craft/go-macro-contrib/register"` 启用官方宏库 link。宏使用方在项目内自建等价 `cmd/macroexpand` 时 MAY blank import 同一 `register`（及所需其它宏库 `register` 包）。`go-macro-contrib` MUST NOT 在 `go-macro` 根 module 的 `go.mod` 中被 require。
+`go-macro-contrib` MUST NOT 提供 `Main`/`Run` 作为用户 expand 入口（该职责在 `cmd/macro` / `macro/expandtool`）。
 
-`go-macro-contrib` MUST NOT 提供 `Main`/`Run` 作为用户 expand 入口（该职责在 `macro/expandtool`；可执行入口由宏调用方项目承载）。
+#### Scenario: 通过 expand 自动链接官方宏库
 
-#### Scenario: blank import 后 Registered 含官方库
-
-- **WHEN** 进程 blank import `github.com/arcane-craft/go-macro-contrib/register`
-- **THEN** `expandtool.Registered()` MUST 包含 inline 与 try 的 import path 条目
+- **WHEN** 宏主文件 import `github.com/arcane-craft/go-macro-contrib/inline` 或 `.../try` 并执行 `cmd/macro expand`
+- **THEN** 展开 MUST 成功链接对应 Expander，且无需 blank import `register`
 
 ### Requirement: contrib 独立测试
 

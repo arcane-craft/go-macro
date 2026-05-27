@@ -50,9 +50,9 @@ README MUST 包含 `项目说明`（或等价标题）章节，用通俗语言�
 
 `快速上手` MUST 包含且保持与 `macro-codegen`、`macro-repo-layout` 一致的下列语义（README 正文 MAY 使用自然语言，不必逐字保留 RFC 2119 英文关键词）：
 
-- **首要步骤**：在使用宏的项目内创建 `cmd/macroexpand`（blank import 所需 `register`，调用 `expandtool.Main()`）
-- 以 `examples/cmd/macroexpand` 与 `examples/readfile` 作为**对照示例**（非宏使用方默认长期命令）
-- 使用宏的文件（带 `//go:build macro`）中的 `//go:generate` 指向**本项目** expand，RECOMMENDED 为 `go run ./cmd/macroexpand .`（或模块等价路径）
+- **首要步骤**：在使用宏的文件中添加 `//go:generate go run github.com/arcane-craft/go-macro/cmd/macro@latest expand .`
+- 以 `examples/readfile` 作为对照示例
+- 使用宏的文件（带 `//go:build macro`）中的 `//go:generate` MUST 指向 `cmd/macro expand`（模块内等价命令亦可）
 - 须在使用宏的文件中 import 所用宏库
 - 对外发布的库 SHOULD 提交 `*_macro_gen.go`
 - 日常 `go build` / `go test` 使用生成侧代码，不依赖读者长期开启 `-tags macro`
@@ -60,12 +60,12 @@ README MUST 包含 `项目说明`（或等价标题）章节，用通俗语言�
 #### Scenario: 快速上手与 codegen spec 对齐
 
 - **WHEN** 读者对照 `macro-codegen` 中关于 README 与 expand 入口的 MUST
-- **THEN** README `快速上手` MUST 在 generate 之前说明项目内 `cmd/macroexpand`，并包含对外提交 gen 的表述
+- **THEN** README `快速上手` MUST 在 generate 之前说明 `cmd/macro expand`，并包含对外提交 gen 的表述
 
 #### Scenario: examples 仅作对照
 
 - **WHEN** 读者阅读 README `快速上手` 全文
-- **THEN** MUST 能找到指向 `examples/cmd/macroexpand` 或 `examples/readfile` 的对照说明，且 MUST NOT 将 `go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand` 作为宏使用方项目的唯一或默认推荐命令
+- **THEN** MUST 能找到指向 `examples/readfile` 的对照说明，且 MUST NOT 要求自建 `cmd/macroexpand`
 
 ### Requirement: README 命令节与 cmd/macro 调用方式
 

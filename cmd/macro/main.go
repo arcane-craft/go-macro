@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/arcane-craft/go-macro/macro/expandtool"
 )
 
 func main() {
@@ -27,6 +29,12 @@ func main() {
 			fmt.Fprintf(os.Stderr, "macro init: %v\n", err)
 			os.Exit(1)
 		}
+	case "expand":
+		args := os.Args[2:]
+		if err := expandtool.RunExpandCommand(args); err != nil {
+			fmt.Fprintf(os.Stderr, "macro expand: %v\n", err)
+			os.Exit(1)
+		}
 	default:
 		printUsage()
 		os.Exit(2)
@@ -38,9 +46,11 @@ func printUsage() {
 
 Usage:
   go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider <name>
+  go run github.com/arcane-craft/go-macro/cmd/macro@latest expand [patterns...]
 
-Example:
+Examples:
   go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider mymac
+  go run github.com/arcane-craft/go-macro/cmd/macro@latest expand .
 `)
 }
 
@@ -66,14 +76,16 @@ func runInitProvider(name string) error {
 	if mod != "" {
 		importPath = mod + "/" + name
 	}
+	syntaxID := "syntax-" + name
 	files := map[string]string{
 		"stubs.go": fmt.Sprintf(`package %s
 
+//macro: %s
 // Macro is a syntax stub. Do not call at runtime.
 func Macro[T any](v T) T {
 	panic("Macro is a macro stub and must not be called at runtime")
 }
-`, name),
+`, name, syntaxID),
 		"expand.go": fmt.Sprintf(`package %s
 
 import (
@@ -82,7 +94,7 @@ import (
 	"github.com/arcane-craft/go-macro/macro"
 )
 
-//macro: syntax-%s
+//macro: %s
 
 // MacroExpand expands Macro calls (placeholder: returns argument).
 func MacroExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error) {
@@ -94,7 +106,7 @@ func MacroExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, err
 	}
 	return macro.ExpandResult{Expr: call.Args[0]}, nil
 }
-`, name, name),
+`, name, syntaxID),
 		"expand_test.go": fmt.Sprintf(`package %s_test
 
 import (
@@ -105,26 +117,15 @@ import (
 )
 
 func TestMacroExpand(t *testing.T) {
-	_, err := mactest.Expand(%s.MacroExpand, "Macro", "syntax-%s", `+"`"+`
+	_, err := mactest.Expand(%s.MacroExpand, "Macro", "%s", `+"`"+`
 func f() int { return Macro(42) }
 `+"`"+`)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
-`, name, importPath, name, name),
-		"register/register.go": fmt.Sprintf(`package register
-
-import (
-	"%s"
-	"github.com/arcane-craft/go-macro/macro/expandtool"
-)
-
-func init() {
-	expandtool.Register("%s", %s.MacroExpand)
-}
-`, importPath, importPath, name),
-		"README.md": fmt.Sprintf("# %s macro provider\n\nSee [author guide](https://github.com/arcane-craft/go-macro/blob/main/docs/author-guide.md).\n\nMacro consumers need an expand entry (blank import register + expandtool.Main()). Recommended:\n\n```go\n//go:generate go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .\n```\n", name),
+`, name, importPath, name, syntaxID),
+		"README.md": fmt.Sprintf("# %s macro provider\n\nSee [author guide](https://github.com/arcane-craft/go-macro/blob/main/docs/author-guide.md).\n\nConsumers run:\n\n```go\n//go:generate go run github.com/arcane-craft/go-macro/cmd/macro@latest expand .\n```\n", name),
 	}
 	for path, content := range files {
 		full := filepath.Join(dir, path)

@@ -32,7 +32,7 @@ func (e *Engine) ExpandFile(
 		return calls[i].Call.Pos() > calls[j].Call.Pos()
 	})
 	for _, mc := range calls {
-		_, expand, ok := e.Registry.Lookup(mc.StubName)
+		_, expand, ok := e.Registry.Lookup(mc.ImportPath, mc.StubName)
 		if !ok {
 			return macro.ErrorAt(fset, mc.Call.Pos(), "unknown macro stub %q", mc.StubName)
 		}
@@ -60,11 +60,7 @@ func (e *Engine) ExpandFile(
 func (e *Engine) RegisterLinked(active map[string]macro.Expander, filesByPath map[string][]*ast.File) error {
 	for importPath, expand := range active {
 		files := filesByPath[importPath]
-		syntaxID, err := macro.ProviderSyntaxID(files)
-		if err != nil {
-			return fmt.Errorf("register %s: %w", importPath, err)
-		}
-		if err := e.Registry.RegisterProvider(importPath, files, syntaxID, expand); err != nil {
+		if err := e.Registry.RegisterProvider(importPath, files, expand); err != nil {
 			return fmt.Errorf("register %s: %w", importPath, err)
 		}
 	}

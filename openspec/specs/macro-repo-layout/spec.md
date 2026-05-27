@@ -9,45 +9,43 @@ TBD - created by archiving change contrib-go-run-expand. Update Purpose after ar
 
 | 目录 | module 路径 | 职责 |
 |------|-------------|------|
-| 仓库根 | `github.com/arcane-craft/go-macro` | 核心库：`macro/`、`internal/expander/`、`internal/codegen/` 等；`cmd/macro`（仅 `init provider`） |
-| `examples/` | `github.com/arcane-craft/go-macro/examples` | 示例宏调用方工程；包含参考 `cmd/macroexpand/` 接线实现 |
+| 仓库根 | `github.com/arcane-craft/go-macro` | 核心库：`macro/`、`internal/expander/`、`internal/codegen/` 等；`cmd/macro`（`init provider`、`expand`） |
+| `examples/` | `github.com/arcane-craft/go-macro/examples` | 示例宏调用方工程（宏主文件 + `go:generate`） |
 
-官方宏库（`inline`、`try`、`register`）MUST 位于独立仓库 `github.com/arcane-craft/go-macro-contrib`，不在本仓库目录树内。
+官方宏库（`inline`、`try`）MUST 位于独立仓库 `github.com/arcane-craft/go-macro-contrib`，不在本仓库目录树内。
 
-根 module MUST NOT 再包含顶层 `inline/`、`try/`、`contrib/` 或根级 `cmd/macroexpand/`。
+根 module MUST NOT 再包含顶层 `inline/`、`try/`、`contrib/`，也 MUST NOT 要求维护 `cmd/macroexpand/`。
 
 #### Scenario: 根 module 仅承载框架库
 
 - **WHEN** 查看 `go-macro` 根目录 `go.mod`
 - **THEN** MUST 仅 `require` 核心构建所需依赖（如 `golang.org/x/tools`），MUST NOT `require github.com/arcane-craft/go-macro-contrib`
 
-### Requirement: 调用方项目承载 expand 入口，examples 提供参考实现
+### Requirement: 调用方项目通过 cmd/macro expand 承载展开
 
-宏展开入口 MUST 由宏调用方项目承载（如项目内 `cmd/macroexpand`），并且实现 MUST 通过 blank import 所需 `register` 包后调用 `expandtool.Main()`（或与 `Run` 等价的接线模式）。
-
-`examples/cmd/macroexpand` MUST 作为参考实现存在于 examples module；其路径 `github.com/arcane-craft/go-macro/examples/cmd/macroexpand` 为 RECOMMENDED 默认用法，但 MUST NOT 被解释为唯一允许路径。
+宏展开入口 MUST 由 `cmd/macro expand` 提供；宏调用方项目通过 `//go:generate` 或命令行调用该子命令触发展开。MUST NOT 要求调用方手写 `cmd/macroexpand` 与 `register` 接线代码。
 
 官方宏库依赖 MUST 落在调用方工程 module（例如 examples）与 `go-macro-contrib` module，而非 `go-macro` 根 module。
 
 宏使用方推荐 generate 一行：
 
 ```go
-//go:generate go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .
+//go:generate go run github.com/arcane-craft/go-macro/cmd/macro@latest expand .
 ```
 
-#### Scenario: 使用 examples 参考入口
+#### Scenario: 使用 cmd/macro expand
 
-- **WHEN** 用户于宏主文件所在 module 执行 `go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .`
-- **THEN** MUST 编译 examples 下参考入口并成功展开已 import 且已 link 的宏
+- **WHEN** 用户于宏主文件所在 module 执行 `go run github.com/arcane-craft/go-macro/cmd/macro@latest expand .`
+- **THEN** MUST 成功展开已 import 的宏调用并写回生成文件
 
-#### Scenario: 使用调用方自建入口
+#### Scenario: 仅维护宏主文件与 generate
 
-- **WHEN** 用户在自身项目内实现等价 `cmd/macroexpand`（blank import register 并调用 `expandtool.Main()`）
-- **THEN** MUST 在行为上与参考入口等价，并成功展开已 import 且已 link 的宏
+- **WHEN** 用户项目不包含 `cmd/macroexpand` 目录，仅在宏主文件维护 `go:generate`
+- **THEN** MUST 仍可通过 `cmd/macro expand` 完成展开
 
 ### Requirement: 根 module 测试不依赖 contrib
 
-`go-macro` 根 module 内所有 `*_test.go` MUST NOT import `github.com/arcane-craft/go-macro-contrib/...` 任何包（含 `inline`、`try`、`register`）。
+`go-macro` 根 module 内所有 `*_test.go` MUST NOT import `github.com/arcane-craft/go-macro-contrib/...` 任何包（含 `inline`、`try`）。
 
 依赖真实 `TryExpand` / `InlineExpand` 的宏库单测在 `go-macro-contrib` 仓库；`examples` 仅保留示例包内 golden 等轻量测试（不强制 module 级 expand 集成测试）。
 

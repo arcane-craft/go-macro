@@ -103,7 +103,7 @@ provider 包内的语法桩（包级 panic 函数）在运行时 MUST panic，�
 - `Run(args []string, linked map[string]Expander) error` — `args` 为空时 MUST 默认 `[]string{"./..."}`；`linked` 为 `nil` 时使用 `Registered()`；内部调用 `expander.ExpandPackages`
 - `Main()` — `Run(os.Args[1:], nil)`，错误时 MUST 写 stderr 并以非零状态退出
 
-框架 MUST 仅负责提供上述展开能力与接线模式；provider 作者 MUST NOT 被要求实现或维护 expand main。具体可执行入口 MUST 由宏调用方项目承载，`examples/cmd/macroexpand` 可作为参考实现，但 MUST NOT 被视为唯一允许入口。
+框架 MUST 仅负责提供上述展开能力与接线模式；provider 作者 MUST NOT 被要求实现或维护 expand main。默认可执行入口 MUST 为 `cmd/macro expand`（或其等价调用），MUST NOT 要求宏使用方维护 `cmd/macroexpand`。
 
 #### Scenario: Main 使用 Registered 注册表
 

@@ -10,85 +10,172 @@ import (
 
 const macroCommentPrefix = "macro:"
 
-// Registry maps stub names to syntax IDs and expanders.
+// Registry maps provider import paths to stubs and expanders.
 type Registry struct {
-	stubToSyntax   map[string]string
+	stubSyntax     map[string]map[string]string // importPath -> stubName -> syntaxID
 	syntaxToExpand map[string]Expander
+	importExpand   map[string]Expander // importPath -> expander
 	providerStubs  map[string]map[string]struct{}
 }
 
 // NewRegistry returns an empty registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		stubToSyntax:   make(map[string]string),
+		stubSyntax:     make(map[string]map[string]string),
 		syntaxToExpand: make(map[string]Expander),
+		importExpand:   make(map[string]Expander),
 		providerStubs:  make(map[string]map[string]struct{}),
 	}
 }
 
-// ProviderSyntaxID returns the //macro: syntax-id from provider source files.
-func ProviderSyntaxID(files []*ast.File) (string, error) {
-	for _, f := range files {
-		if sid, ok := fileMacroSyntaxID(f); ok {
-			return sid, nil
-		}
-	}
-	return "", fmt.Errorf("macro: provider files missing //macro: directive")
+// ProviderInfo describes a macro provider package discovered from source.
+type ProviderInfo struct {
+	SyntaxID     string
+	ExpanderName string
+	StubNames    []string
 }
 
-// RegisterProvider scans provider AST files, registers panic stubs, and binds syntax-id to expander.
-func (r *Registry) RegisterProvider(importPath string, files []*ast.File, syntaxID string, expand Expander) error {
-	if expand == nil {
-		return fmt.Errorf("macro: expander for %q is nil", syntaxID)
-	}
-	foundDirective := false
-	stubs := make(map[string]struct{})
+// ScanProviderFiles parses provider sources for per-function //macro: directives.
+func ScanProviderFiles(files []*ast.File) (ProviderInfo, error) {
+	var info ProviderInfo
+	expanders := make(map[string]string) // syntaxID -> func name
+
 	for _, f := range files {
-		sid, ok := fileMacroSyntaxID(f)
-		if ok {
-			if sid != syntaxID {
-				return fmt.Errorf("macro: conflicting syntax-id in provider %s: %q vs %q", importPath, sid, syntaxID)
-			}
-			foundDirective = true
-		}
 		for _, decl := range f.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Body == nil || fn.Recv != nil || fn.Name == nil {
+			if !ok || fn.Recv != nil || fn.Name == nil {
 				continue
 			}
-			if isPanicStub(fn) {
-				stubs[fn.Name.Name] = struct{}{}
+			sid, ok := funcMacroSyntaxID(fn)
+			if !ok {
+				continue
 			}
+			if isExpanderDecl(fn) {
+				if prev, exists := expanders[sid]; exists && prev != fn.Name.Name {
+					return ProviderInfo{}, fmt.Errorf("macro: multiple expanders for syntax-id %q", sid)
+				}
+				expanders[sid] = fn.Name.Name
+				continue
+			}
+			if info.SyntaxID == "" {
+				info.SyntaxID = sid
+			} else if sid != info.SyntaxID {
+				return ProviderInfo{}, fmt.Errorf("macro: stub %q syntax-id %q != %q",
+					fn.Name.Name, sid, info.SyntaxID)
+			}
+			info.StubNames = append(info.StubNames, fn.Name.Name)
 		}
 	}
-	if !foundDirective {
-		return fmt.Errorf("macro: provider %s missing //macro: directive", importPath)
+
+	if len(expanders) == 0 {
+		return ProviderInfo{}, fmt.Errorf("macro: provider missing Expander with //macro: directive")
 	}
-	r.syntaxToExpand[syntaxID] = expand
+	if len(expanders) > 1 {
+		return ProviderInfo{}, fmt.Errorf("macro: provider has multiple syntax-id expanders (%d)", len(expanders))
+	}
+	for sid, name := range expanders {
+		if info.SyntaxID != "" && sid != info.SyntaxID {
+			return ProviderInfo{}, fmt.Errorf("macro: expander syntax-id %q != stub syntax-id %q", sid, info.SyntaxID)
+		}
+		info.SyntaxID = sid
+		info.ExpanderName = name
+	}
+	if len(info.StubNames) == 0 {
+		return ProviderInfo{}, fmt.Errorf("macro: provider has no stub functions with //macro: directive")
+	}
+	return info, nil
+}
+
+// ProviderSyntaxID returns the syntax-id from the sole Expander's //macro: directive.
+func ProviderSyntaxID(files []*ast.File) (string, error) {
+	info, err := ScanProviderFiles(files)
+	if err != nil {
+		return "", err
+	}
+	return info.SyntaxID, nil
+}
+
+// RegisterProvider registers stubs and binds the linked expander for importPath.
+func (r *Registry) RegisterProvider(importPath string, files []*ast.File, expand Expander) error {
+	if expand == nil {
+		return fmt.Errorf("macro: expander for %q is nil", importPath)
+	}
+	info, err := ScanProviderFiles(files)
+	if err != nil {
+		return fmt.Errorf("macro: provider %s: %w", importPath, err)
+	}
+
+	stubs := make(map[string]struct{})
+	stubSyntax := make(map[string]string)
+	for _, f := range files {
+		for _, decl := range f.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Recv != nil || fn.Name == nil || isExpanderDecl(fn) {
+				continue
+			}
+			sid, ok := funcMacroSyntaxID(fn)
+			if !ok {
+				continue
+			}
+			if sid != info.SyntaxID {
+				return fmt.Errorf("macro: conflicting syntax-id in provider %s", importPath)
+			}
+			stubs[fn.Name.Name] = struct{}{}
+			stubSyntax[fn.Name.Name] = sid
+		}
+	}
+
+	r.importExpand[importPath] = expand
+	r.syntaxToExpand[info.SyntaxID] = expand
 	r.providerStubs[importPath] = stubs
-	for stub := range stubs {
-		r.stubToSyntax[stub] = syntaxID
+	if r.stubSyntax[importPath] == nil {
+		r.stubSyntax[importPath] = make(map[string]string)
+	}
+	for k, v := range stubSyntax {
+		r.stubSyntax[importPath][k] = v
 	}
 	return nil
 }
 
-// RegisterStub maps a stub name to a syntax ID.
-func (r *Registry) RegisterStub(stubName, syntaxID string) {
-	r.stubToSyntax[stubName] = syntaxID
+// RegisterStub maps a stub name to a syntax ID for importPath (tests).
+func (r *Registry) RegisterStub(importPath, stubName, syntaxID string) {
+	if r.stubSyntax[importPath] == nil {
+		r.stubSyntax[importPath] = make(map[string]string)
+	}
+	r.stubSyntax[importPath][stubName] = syntaxID
+	if r.providerStubs[importPath] == nil {
+		r.providerStubs[importPath] = make(map[string]struct{})
+	}
+	r.providerStubs[importPath][stubName] = struct{}{}
 }
 
-// RegisterSyntax binds a syntax ID to an expander.
+// RegisterSyntax binds a syntax ID to an expander (tests).
 func (r *Registry) RegisterSyntax(syntaxID string, expand Expander) {
 	r.syntaxToExpand[syntaxID] = expand
 }
 
-// Lookup returns syntax ID and expander for a stub name.
-func (r *Registry) Lookup(stubName string) (syntaxID string, expand Expander, ok bool) {
-	syntaxID, ok = r.stubToSyntax[stubName]
+// RegisterImportExpander binds importPath to expander (tests).
+func (r *Registry) RegisterImportExpander(importPath string, expand Expander) {
+	r.importExpand[importPath] = expand
+}
+
+// Lookup returns syntax ID and expander for a stub in importPath.
+func (r *Registry) Lookup(importPath, stubName string) (syntaxID string, expand Expander, ok bool) {
+	stubs, ok := r.providerStubs[importPath]
 	if !ok {
 		return "", nil, false
 	}
-	expand, ok = r.syntaxToExpand[syntaxID]
+	if _, ok = stubs[stubName]; !ok {
+		return "", nil, false
+	}
+	syntaxID, ok = r.stubSyntax[importPath][stubName]
+	if !ok {
+		return "", nil, false
+	}
+	expand, ok = r.importExpand[importPath]
+	if !ok {
+		expand, ok = r.syntaxToExpand[syntaxID]
+	}
 	return syntaxID, expand, ok
 }
 
@@ -120,23 +207,13 @@ func ParseProviderFiles(fset *token.FileSet, sources map[string][]byte) ([]*ast.
 	return files, nil
 }
 
-func fileMacroSyntaxID(f *ast.File) (string, bool) {
-	for _, cg := range f.Comments {
-		for _, c := range cg.List {
-			if sid, ok := parseMacroComment(c.Text); ok {
-				return sid, true
-			}
-		}
+func funcMacroSyntaxID(fn *ast.FuncDecl) (string, bool) {
+	if fn.Doc == nil {
+		return "", false
 	}
-	for _, decl := range f.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Doc == nil {
-			continue
-		}
-		for _, c := range fn.Doc.List {
-			if sid, ok := parseMacroComment(c.Text); ok {
-				return sid, true
-			}
+	for _, c := range fn.Doc.List {
+		if sid, ok := parseMacroComment(c.Text); ok {
+			return sid, true
 		}
 	}
 	return "", false
@@ -155,18 +232,13 @@ func parseMacroComment(text string) (string, bool) {
 	return parts[0], true
 }
 
-func isPanicStub(fn *ast.FuncDecl) bool {
-	if fn.Body == nil || len(fn.Body.List) != 1 {
+// isExpanderDecl reports whether fn looks like func(Context, *ast.CallExpr) (ExpandResult, error).
+func isExpanderDecl(fn *ast.FuncDecl) bool {
+	if fn.Type.Params == nil || fn.Type.Results == nil {
 		return false
 	}
-	exprStmt, ok := fn.Body.List[0].(*ast.ExprStmt)
-	if !ok {
+	if len(fn.Type.Params.List) != 2 || len(fn.Type.Results.List) != 2 {
 		return false
 	}
-	call, ok := exprStmt.X.(*ast.CallExpr)
-	if !ok {
-		return false
-	}
-	ident, ok := call.Fun.(*ast.Ident)
-	return ok && ident.Name == "panic"
+	return true
 }

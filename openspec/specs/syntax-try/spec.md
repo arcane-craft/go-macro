@@ -150,7 +150,7 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 ### Requirement: Try 端到端示例
 
-仓库 MUST 在 **examples module** 包含 `readfile` 示例（`Try` 用于 k=1），包路径 `github.com/arcane-craft/go-macro/examples/readfile`。示例 MUST import `github.com/arcane-craft/go-macro-contrib/try`，经 `go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand` generate 后 `go test` 与 golden 一致。
+仓库 MUST 在 **examples module** 包含 `readfile` 示例（`Try` 用于 k=1），包路径 `github.com/arcane-craft/go-macro/examples/readfile`。示例 MUST import `github.com/arcane-craft/go-macro-contrib/try`，经 `go run github.com/arcane-craft/go-macro/cmd/macro@latest expand .` generate 后 `go test` 与 golden 一致。
 
 #### Scenario: ReadFile 黄金测试
 

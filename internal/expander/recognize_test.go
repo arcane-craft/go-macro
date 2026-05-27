@@ -17,17 +17,26 @@ const providerPath = "example.com/macprov"
 func TestRecognizeExplicitImport(t *testing.T) {
 	providerSrc := `package macprov
 
-//macro: syntax-test
+import (
+	"go/ast"
+	"github.com/arcane-craft/go-macro/macro"
+)
 
+//macro: syntax-test
 func MacroStub(int) int { panic("x") }
+
+//macro: syntax-test
+func MacroExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error) {
+	return macro.ExpandResult{}, nil
+}
 `
 	fset := token.NewFileSet()
-	pf, err := parser.ParseFile(fset, "stubs.go", providerSrc, parser.ParseComments)
+	pf, err := parser.ParseFile(fset, "p.go", providerSrc, parser.ParseComments)
 	if err != nil {
 		t.Fatal(err)
 	}
 	reg := macro.NewRegistry()
-	if err := reg.RegisterProvider(providerPath, []*ast.File{pf}, "syntax-test", func(macro.Context, *ast.CallExpr) (macro.ExpandResult, error) {
+	if err := reg.RegisterProvider(providerPath, []*ast.File{pf}, func(macro.Context, *ast.CallExpr) (macro.ExpandResult, error) {
 		return macro.ExpandResult{}, nil
 	}); err != nil {
 		t.Fatal(err)
@@ -83,7 +92,7 @@ func TestRecognizeShadowNotMacro(t *testing.T) {
 	params := types.NewTuple(types.NewParam(0, nil, "", types.Typ[types.Int]))
 	results := types.NewTuple(types.NewParam(0, nil, "", types.Typ[types.Int]))
 	stubSig := types.NewSignature(nil, params, results, false)
-	_ = reg.RegisterProvider(providerPath, []*ast.File{mustParseProvider(t, fset)}, "syntax-test", nil)
+	_ = reg.RegisterProvider(providerPath, []*ast.File{mustParseProvider(t, fset)}, nil)
 
 	src := `package u
 func MacroStub(int) int { return 0 }
@@ -114,7 +123,7 @@ func f() int { return MacroStub(1) }
 func TestRecognizeMethodCallNotMacro(t *testing.T) {
 	fset := token.NewFileSet()
 	reg := macro.NewRegistry()
-	_ = reg.RegisterProvider(providerPath, []*ast.File{mustParseProvider(t, fset)}, "syntax-test", nil)
+	_ = reg.RegisterProvider(providerPath, []*ast.File{mustParseProvider(t, fset)}, nil)
 
 	src := `package u
 type S struct{}
@@ -144,9 +153,14 @@ func f() int {
 
 func mustParseProvider(t *testing.T, fset *token.FileSet) *ast.File {
 	t.Helper()
-	pf, err := parser.ParseFile(fset, "stubs.go", `package macprov
+	pf, err := parser.ParseFile(fset, "p.go", `package macprov
+import ("go/ast"; "github.com/arcane-craft/go-macro/macro")
 //macro: syntax-test
 func MacroStub(int) int { panic("x") }
+//macro: syntax-test
+func MacroExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error) {
+	return macro.ExpandResult{}, nil
+}
 `, parser.ParseComments)
 	if err != nil {
 		t.Fatal(err)

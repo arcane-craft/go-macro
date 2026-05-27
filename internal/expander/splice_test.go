@@ -235,11 +235,16 @@ func stubTryAssignExpandResult(call *ast.CallExpr) macro.ExpandResult {
 func registerTryProvider(t *testing.T, fset *token.FileSet) *macro.Registry {
 	t.Helper()
 	pf, _ := parser.ParseFile(fset, "try.go", `package try
+import ("go/ast"; "github.com/arcane-craft/go-macro/macro")
 //macro: syntax-try
 func Try[T any](v T, err error) T { panic("x") }
+//macro: syntax-try
+func TryExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error) {
+	return macro.ExpandResult{}, nil
+}
 `, parser.ParseComments)
 	reg := macro.NewRegistry()
-	if err := reg.RegisterProvider("example.com/try", []*ast.File{pf}, "syntax-try", noopExpander); err != nil {
+	if err := reg.RegisterProvider("example.com/try", []*ast.File{pf}, noopExpander); err != nil {
 		t.Fatal(err)
 	}
 	return reg

@@ -1,7 +1,6 @@
 package expandtool
 
 import (
-	"fmt"
 	"os"
 	"sync"
 
@@ -47,7 +46,6 @@ func Run(args []string, linked map[string]macro.Expander) error {
 // Main runs Run(os.Args[1:], nil) and exits non-zero on error.
 func Main() {
 	if err := Run(os.Args[1:], nil); err != nil {
-		fmt.Fprintf(os.Stderr, "macroexpand: %v\n", err)
-		os.Exit(1)
+		ExitWithError(err)
 	}
 }

@@ -31,9 +31,12 @@ func TestImportedProviderPaths(t *testing.T) {
 		Mode:       packages.NeedImports,
 		BuildFlags: []string{"-tags=macro"},
 	}
-	pkgs, err := packages.Load(cfg, "github.com/arcane-craft/go-macro/examples/readfile")
+	pkgs, err := packages.Load(cfg, "./examples/readfile")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(pkgs) == 0 || pkgs[0].PkgPath == "" {
+		t.Skip("examples module not available")
 	}
 	m := importedProviderPaths(pkgs[0])
 	if !m["github.com/arcane-craft/go-macro-contrib/try"] {

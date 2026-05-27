@@ -1,6 +1,6 @@
 //go:build macro
 
-//go:generate go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .
+//go:generate go run github.com/arcane-craft/go-macro/cmd/macro expand .
 
 package readfile
 
