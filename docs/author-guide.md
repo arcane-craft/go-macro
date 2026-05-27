@@ -74,6 +74,7 @@ func XxxExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error
 - 桩必须是**包级函数**（无 receiver）
 - doc 里要有 `//macro:`
 - 建议函数体 `panic(...)`，避免运行时被误调用
+- 在宏主文件中，**已 link 注册的**语法桩只能写成直调：`pkg.Stub(...)`（或 dot-import 下的 `Stub(...)`）。不要把桩当作普通函数值传递、赋值、返回，也不要传给 `reflect.ValueOf` / `reflect.TypeOf`；违反时 `expand` 会报错
 
 #### 5. ExpandResult 与调用位置
 
@@ -124,6 +125,10 @@ if err != nil {
 工具**不会**修改宏主文件上的 build tag。生成代码带 `//line foo.go:N`，报错行号会指回主文件。
 
 日常 `go build`、`go test` 用生成侧即可，一般不必长期加 `-tags macro`。
+
+### 如何写宏调用
+
+对已 link 的宏库，在宏主文件里应**直接调用**语法桩，例如 `try.Try(...)` 或 `inline.Inline(...)`。不要写 `f(try.Try)`、`fn := try.Try` 等把桩当作函数值的用法，`cmd/macro expand` 会失败并给出文件行号。
 
 ### expand 入口
 

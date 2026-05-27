@@ -93,6 +93,44 @@ func typecheckWithProvider(t *testing.T, fset *token.FileSet, f *ast.File, provi
 	return info
 }
 
+// typecheckFileWithStubUses type-checks f or wires provider stub selectors/idents for tests.
+func typecheckFileWithStubUses(t *testing.T, fset *token.FileSet, f *ast.File, providerPath, stubName string) *types.Info {
+	t.Helper()
+	providerPkg := types.NewPackage(providerPath, "macprov")
+	params := types.NewTuple(types.NewParam(0, nil, "", types.Typ[types.Int]))
+	results := types.NewTuple(types.NewParam(0, nil, "", types.Typ[types.Int]))
+	sig := types.NewSignature(nil, params, results, false)
+	stub := types.NewFunc(token.NoPos, providerPkg, stubName, sig)
+
+	info := &types.Info{
+		Uses: make(map[*ast.Ident]types.Object),
+		Defs: make(map[*ast.Ident]types.Object),
+	}
+	cfg := &types.Config{Importer: importer.Default()}
+	if _, err := cfg.Check("u", fset, []*ast.File{f}, info); err == nil {
+		return info
+	}
+	impPkg := types.NewPackage("u", "u")
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch e := n.(type) {
+		case *ast.SelectorExpr:
+			if e.Sel.Name != stubName {
+				return true
+			}
+			if id, ok := e.X.(*ast.Ident); ok {
+				info.Uses[id] = types.NewPkgName(token.NoPos, impPkg, id.Name, providerPkg)
+				info.Uses[e.Sel] = stub
+			}
+		case *ast.Ident:
+			if e.Name == stubName {
+				info.Uses[e] = stub
+			}
+		}
+		return true
+	})
+	return info
+}
+
 func TestModuleRoot(t *testing.T) {
 	root, err := expander.ModuleRoot([]string{"github.com/arcane-craft/go-macro/internal/expander"})
 	if err != nil {

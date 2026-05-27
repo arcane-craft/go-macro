@@ -24,6 +24,9 @@ func (e *Engine) ExpandFile(
 	pkg *types.Package,
 	imports map[string]string,
 ) error {
+	if err := ValidateStubValueUsage(fset, file, info, e.Registry); err != nil {
+		return err
+	}
 	calls, err := RecognizeMacroCalls(file, info, imports, e.Registry)
 	if err != nil {
 		return err

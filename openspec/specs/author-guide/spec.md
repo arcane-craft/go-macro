@@ -47,6 +47,7 @@
 - 宏主文件 MUST import provider；`cmd/macro expand` 仅对已 import 且已生成 link 的 provider 展开
 - MUST NOT 要求宏作者维护 `register/` 包
 - 语法桩为包级 `panic` 函数，运行时不可调用
+- **宏主文件中，已 link 注册的语法桩 MUST 仅以 `pkg.Stub(...)`（或 dot-import 下 `Stub(...)`）直接调用；MUST NOT 将桩作为函数值传递、赋值、返回或传入 `reflect.ValueOf` / `reflect.TypeOf`；违反时 expand MUST 失败（见 `macro-expander`）**
 - `ExpandResult` 的 `Stmts` / `Expr` / `Exprs` 及宏出现位置与返回字段的对应关系（MAY 以表格呈现，标题 MAY 不使用「Site」术语）
 - 展开时 `Context` MUST 提供 `EnclosingFunc()`（`*ast.FuncDecl` 或 `*ast.FuncLit`），供 provider 读取外层函数语境
 - `init provider` 文档入口为 `go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider <name>`
@@ -57,18 +58,24 @@
 - **WHEN** 读者对照 `macro-directive` 与 `macro-core` 要求
 - **THEN** author-guide `编写宏库` MUST 说明 per-function `//macro:`，且 MUST NOT 将 `register/` 列为作者职责
 
+#### Scenario: 值用法约束可查
+
+- **WHEN** 宏库作者或宏使用方阅读 `编写宏库` 或 `宏使用方`
+- **THEN** MUST 能找到「桩须直调、不可作函数值」的说明，且 MUST 指向 expand 期报错行为
+
 ### Requirement: 宏使用方节保留 codegen 要点
 
-`宏使用方` MUST 包含且保持与 `macro-codegen`、`macro-repo-layout` 一致的下列语义（正文 MAY 使用「主文件 + 生成文件」等自然语言，不必出现「方案 C」字样）：
+`宏使用方` MUST 说明（语义与 `macro-codegen` 一致，文案 MAY 简化）：
 
-- 主文件 `//go:build macro`、生成侧 `//go:build !macro`、工具不修改主文件 build tag、生成代码含 `//line` 指向宏主文件
-- expand 入口 RECOMMENDED 为 `go run github.com/arcane-craft/go-macro/cmd/macro@latest expand`（或 generate 一行），无需自建 `cmd/macroexpand`
-- 对外发布建议：expand、`go test`（无 `-tags macro`）、提交 `*_macro_gen.go`、可选 CI `git diff --exit-code`
+- 宏主文件与 `*_macro_gen.go` 的 build tag 分工
+- `go:generate` 调用 `cmd/macro expand`（或等价）生成侧文件
+- 发布前在带/不带 `macro` tag 下测试的建议
+- **已 link 的语法桩在宏主文件中 MUST 直接调用；将桩作为参数、变量或反射对象会导致 expand 失败**
 
-#### Scenario: expand 入口与 examples 定位清晰
+#### Scenario: 使用方知悉 expand 约束
 
-- **WHEN** 读者阅读 `宏使用方` 中 expand 入口说明
-- **THEN** MUST 理解 expand 入口默认由 `cmd/macro expand` 提供，且无需维护 `cmd/macroexpand` 代码
+- **WHEN** 仅使用已有宏库的读者阅读 `宏使用方`
+- **THEN** MUST 能理解 `import` 宏库后应写 `try.Try(...)` 一类直调，且 MUST NOT 依赖将 `try.Try` 当作普通函数值
 
 ### Requirement: 参考内容与主路径分离
 
