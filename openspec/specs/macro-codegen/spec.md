@@ -2,9 +2,7 @@
 
 ## Purpose
 定义宏展开代码生成链路：以 `cmd/macro expand` 作为统一入口，自动生成 link runner 并写回 `*_macro_gen.go`。
-
 ## Requirements
-
 ### Requirement: go generate 集成
 
 工具链 MUST 支持在宏主文件中通过一行 generate 触发展开，且 MUST NOT 要求用户自建 `cmd/macroexpand` 或手写 `register`。
@@ -86,7 +84,7 @@ RECOMMENDED 命令：
 
 ### Requirement: expand 子命令自动 link
 
-`cmd/macro expand` MUST 自动生成并更新 `.gomacro/expand_runner`，依据 provider 上的 `//macro:` 指令进行 Expander link。
+`cmd/macro expand` MUST 自动生成并更新 `.gomacro/expand_runner`，依据 provider 上的 `//macro:` 指令进行 Expander link。官方宏库（`inline`、`try`）的 provider 契约与路径以 `go-macro-contrib` 仓库 OpenSpec（`macro-contrib`、`syntax-inline`、`syntax-try`）为准。
 
 #### Scenario: import 即可 link
 

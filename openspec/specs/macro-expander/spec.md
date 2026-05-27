@@ -49,13 +49,13 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 | `SiteReturn` | `Stmts` | 替换整条 `ReturnStmt` |
 | `SiteStmt` | `Stmts` | 替换 `ExprStmt` |
 | `SiteExpr` | `Expr` | 仅替换 `CallExpr` |
-| `SiteReturn` | `Exprs` | 仅替换 `ReturnStmt` 的 Results 列表（首版保留；`syntax-try` 不得使用，见 `syntax-try` spec） |
+| `SiteReturn` | `Exprs` | 仅替换 `ReturnStmt` 的 Results 列表（首版保留；contrib 仓 `syntax-try` 规范规定 `TryExpand` 在 `SiteReturn` 不得使用 `Exprs`） |
 
-若字段与 Site 不匹配，MUST 报错。引擎 MUST NOT 对 `syntax-try` 或任何 `syntax-id` 硬编码分支；贴回规则仅依赖上表。
+若字段与 Site 不匹配，MUST 报错。引擎 MUST NOT 对任何 `syntax-id` 硬编码分支；贴回规则仅依赖上表。
 
 #### Scenario: return 语境使用 Stmts（引擎行为）
 
-- **WHEN** 某 `Expander`（如 `TryExpand`）对 `SiteReturn` 返回非空 `Stmts`
+- **WHEN** 某 `Expander`（如 contrib 仓的 `TryExpand`）对 `SiteReturn` 返回非空 `Stmts`
 - **THEN** 引擎 MUST 用 `Stmts` 替换整条 `return` 语句
 
 #### Scenario: 表达式宏替换 CallExpr
@@ -74,12 +74,12 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 ### Requirement: 展开器函数签名约定
 
-每个 `Expander` MUST 为 `func(Context, *ast.CallExpr) (ExpandResult, error)`，并通过 provider 包内 `//macro: <syntax-id>` 绑定。
+每个 `Expander` MUST 为 `func(Context, *ast.CallExpr) (ExpandResult, error)`，且 MUST 在其 doc 中含 `//macro: <syntax-id>`。注册表 MUST 将该函数绑定为对应 syntax-id 的展开器（并与同 syntax-id 的桩关联）。
 
 #### Scenario: 注册表绑定 Expander 签名
 
-- **WHEN** provider 包中 `//macro: syntax-inline` 标注的函数签名符合 `Expander`
-- **THEN** 注册表 MUST 将该函数注册为 `syntax-inline` 的展开器
+- **WHEN** provider 包中 `InlineExpand` 的 doc 含 `//macro: syntax-inline` 且签名符合 `Expander`
+- **THEN** 注册表 MUST 将 `syntax-inline` 的展开实现绑定到 `linked` 提供的 `InlineExpand`
 
 ### Requirement: Provider 激活与 Expander 链接
 
@@ -87,11 +87,11 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 1. 收集宏主文件所在包的 **import 路径集合**；
 2. 取 **`linked` 的 key 与 import 集合的交集** 为候选宏库路径；
-3. 对每个候选路径：解析 provider AST（含 `//macro:`）、注册 panic 桩，并绑定 `linked[path]` 的 `Expander`。
+3. 对每个候选路径：解析 provider AST，从**各函数 doc** 读取 `//macro:`，登记桩与 syntax-id，并绑定 `linked[path]` 的 `Expander`。
 
 引擎 MUST NOT 维护官方宏库目录，MUST NOT 在识别或 splice 逻辑中对任何 `syntax-id` 硬编码分支。
 
-`go-macro` 根 module 的 `internal/expander` 包及其测试 MUST NOT import `go-macro-contrib`。对外展开入口为 `macro/expandtool`（不导出 expander 包路径给宏使用方）。
+`go-macro` 根 module 的 `internal/expander` 包及其测试 MUST NOT import `go-macro-contrib`。对外展开入口为 `macro/expandtool` 与 `cmd/macro expand`。
 
 #### Scenario: 未 import 的宏库不 link
 
@@ -107,4 +107,18 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 - **WHEN** 宏主文件 import `github.com/arcane-craft/go-macro-contrib/inline` 与 `.../try`，但 `linked` 仅含 `.../inline`
 - **THEN** 该包 MUST 仅注册 `syntax-inline`；对 `Try(...)` 调用 MUST 展开失败
+
+#### Scenario: 识别使用 importPath 与桩名
+
+- **WHEN** 两个 provider 均含名为 `Macro` 的桩且各自 doc 含 `//macro:`，宏主文件分别通过不同 import path 调用
+- **THEN** 引擎 MUST 按各自 import path 分发到对应 Expander，且 MUST NOT 因桩名相同而错绑
+
+### Requirement: Provider 语义以外置规范为准
+
+`TryExpand`、`InlineExpand` 的载荷校验、Site 禁止规则、展开语句形态等 provider 级语义 MUST 以 `go-macro-contrib` 仓库内 `syntax-try`、`syntax-inline` OpenSpec 为准。本规范仅定义展开引擎的识别、分发、`ExpandResult` 贴回与 link/import 边界。
+
+#### Scenario: 修改 Try 展开语义
+
+- **WHEN** 维护者需变更 `return Try` 的错误路径语句形态
+- **THEN** MUST 修改 contrib 仓 `syntax-try` spec 及 `try` 实现，而非在本 spec 中新增 Try 专用引擎分支
 

@@ -97,14 +97,14 @@ go test ./...
 
 ### 官方宏库
 
-[go-macro-contrib](https://github.com/arcane-craft/go-macro-contrib) 提供：
+[go-macro-contrib](https://github.com/arcane-craft/go-macro-contrib) 提供官方宏库（`inline`、`try`）。在宏主文件中 import 对应包，执行 `cmd/macro expand` 即可展开。
 
 | syntax-id | 模块路径 |
 |-----------|----------|
 | `syntax-inline` | `github.com/arcane-craft/go-macro-contrib/inline` |
 | `syntax-try` | `github.com/arcane-craft/go-macro-contrib/try` |
 
-在宏主文件中 import 对应包，执行 `cmd/macro expand` 即可展开。
+更多说明（含最低兼容核心版本）见 [go-macro-contrib](https://github.com/arcane-craft/go-macro-contrib) 仓库 README。
 
 ### 本地联调
 

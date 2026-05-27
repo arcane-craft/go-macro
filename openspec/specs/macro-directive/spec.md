@@ -1,5 +1,10 @@
-## ADDED Requirements
+# macro-directive Specification
 
+## Purpose
+
+定义 `//macro: <syntax-id>` 注释指令的格式、在语法桩与 Expander 上的使用规则，以及注册表如何通过 syntax-id 关联桩与展开实现。
+
+## Requirements
 ### Requirement: macro 注释指令格式
 
 `//macro: <syntax-id>` MUST 为单行注释，`<syntax-id>` MUST 为非空、由字母数字与连字符组成的标识符（与现有 `syntax-inline`、`syntax-try` 形态一致）。解析器 MUST 忽略 `//macro:` 后的多余空白。

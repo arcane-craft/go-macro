@@ -148,14 +148,14 @@ if err != nil {
 
 ### 官方宏库
 
-[go-macro-contrib](https://github.com/arcane-craft/go-macro-contrib)：
+[go-macro-contrib](https://github.com/arcane-craft/go-macro-contrib) 提供官方宏库：
 
 | syntax-id | 模块路径 |
 |-----------|----------|
 | `syntax-inline` | `github.com/arcane-craft/go-macro-contrib/inline` |
 | `syntax-try` | `github.com/arcane-craft/go-macro-contrib/try` |
 
-宏主文件 import 对应包后，执行 `cmd/macro expand` 即可。
+宏主文件 import 对应包后，执行 `cmd/macro expand` 即可。版本兼容与本地联调见 [go-macro-contrib](https://github.com/arcane-craft/go-macro-contrib) README。
 
 ### 本地联调
 

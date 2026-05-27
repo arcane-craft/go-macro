@@ -3,9 +3,7 @@
 ## Purpose
 
 定义 `docs/author-guide.md` 的信息架构与必备内容，使其面向宏库作者与人类读者可扫读、可分层深入，并与根目录 `README.md` 职责分离。不改变框架运行时行为。
-
 ## Requirements
-
 ### Requirement: 作者指南必备章节顺序
 
 `docs/author-guide.md` MUST 按以下顺序包含顶级章节（`##`），标题文案 MAY 微调但语义 MUST 等价：
@@ -42,20 +40,22 @@
 
 ### Requirement: 编写宏库保留 normative 契约要点
 
-`编写宏库` MUST 包含且保持与 `macro-core`、`macro-codegen` 一致的下列语义（正文 MAY 使用自然语言，不必逐字保留 RFC 2119 英文关键词或设计文档内部代号如「方案 C」「首版」）：
+`编写宏库` MUST 包含且保持与 `macro-core`、`macro-codegen`、`macro-directive` 一致的下列语义（正文 MAY 使用自然语言，不必逐字保留 RFC 2119 英文关键词或设计文档内部代号如「方案 C」「首版」）：
 
-- Provider：`//macro: <syntax-id>` 与 `Expand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error)` 签名约定
-- 宏主文件 MUST import provider；expand 工具仅对已 import 且已在 expand 二进制中 link 的包注册并展开
+- 每个语法桩与 Expander 的 doc MUST 含 `//macro: <syntax-id>`；同一 syntax-id 下多桩共享一个 Expander
+- Provider：`Expand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error)` 签名约定
+- 宏主文件 MUST import provider；`cmd/macro expand` 仅对已 import 且已生成 link 的 provider 展开
+- MUST NOT 要求宏作者维护 `register/` 包
 - 语法桩为包级 `panic` 函数，运行时不可调用
 - `ExpandResult` 的 `Stmts` / `Expr` / `Exprs` 及宏出现位置与返回字段的对应关系（MAY 以表格呈现，标题 MAY 不使用「Site」术语）
 - 展开时 `Context` MUST 提供 `EnclosingFunc()`（`*ast.FuncDecl` 或 `*ast.FuncLit`），供 provider 读取外层函数语境
 - `init provider` 文档入口为 `go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider <name>`
 - 纯 Expand 单测使用 `macro/mactest` 的示例
 
-#### Scenario: 契约与 macro-core 对齐
+#### Scenario: 契约与 macro-directive 对齐
 
-- **WHEN** 读者对照 `macro-core` 中 provider 与 init provider 要求
-- **THEN** author-guide `编写宏库` MUST 包含上述签名、ExpandResult、EnclosingFunc 与 mactest 说明
+- **WHEN** 读者对照 `macro-directive` 与 `macro-core` 要求
+- **THEN** author-guide `编写宏库` MUST 说明 per-function `//macro:`，且 MUST NOT 将 `register/` 列为作者职责
 
 ### Requirement: 宏使用方节保留 codegen 要点
 
@@ -74,10 +74,17 @@
 
 contrib 模块路径、本地 `replace` / `go.work`、双 module 测试命令（如 `GOWORK=off`）MUST 位于 `编写宏库` 与 `宏使用方` 之后的参考类章节（`## 参考` 或其 `###` 子标题），MUST NOT 插入 `编写宏库` 或 `宏使用方` 的编号/步骤中间。
 
+`参考` 节中关于官方宏库（inline/try）的版本兼容与使用说明 MUST 链至 `go-macro-contrib` 仓库 README。author-guide MUST NOT 向终端读者提及 OpenSpec、`openspec/` 目录或内部规范工作流。
+
 #### Scenario: 主路径无参考信息打断
 
 - **WHEN** 读者连续阅读 `编写宏库` 各子节（含 `init provider` 与 mactest）
 - **THEN** 中间 MUST NOT 插入非操作性的长篇本地联调段落
+
+#### Scenario: 官方宏库文档外链
+
+- **WHEN** 读者在 `参考` 节查找 Try/Inline 或 contrib 版本兼容说明
+- **THEN** MUST 能找到指向 `github.com/arcane-craft/go-macro-contrib` README 的链接，且 MUST NOT 出现 OpenSpec 或 `openspec/` 路径
 
 ### Requirement: 禁止无读者价值的 meta 节
 
@@ -107,3 +114,4 @@ author-guide MUST 在 `阅读指引` 或首段链至根目录 `README.md`（快�
 
 - **WHEN** 读者需要 ignore/tag 或 provider 实现细节
 - **THEN** README `文档` 节 MUST 链至 author-guide；author-guide MUST 链回 README 供使用方跳转
+

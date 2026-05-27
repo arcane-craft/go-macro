@@ -89,10 +89,17 @@ README `gopls`（或等价）节 MUST 说明使用宏的源文件常带 `//go:bu
 
 contrib 本地 `replace` 说明、双 module 测试命令（如 `GOWORK=off`）MUST 位于 `快速上手` 之后的参考类章节（`## 参考` 或其子标题 `###`），MUST NOT 插入快速上手编号步骤中间。
 
+官方宏库（`go-macro-contrib`）的版本兼容与使用说明 MUST 链至 contrib 仓库 README。README 与 author-guide MUST NOT 向终端读者提及 OpenSpec、`openspec/` 目录或内部规范工作流。
+
 #### Scenario: 主路径无参考信息打断
 
 - **WHEN** 读者执行 `快速上手` 中的步骤
 - **THEN** MUST 能在连续阅读主路径步骤的过程中完成「准备 expand → 接 generate → 运行展开」，中间 MUST NOT 插入非操作性的长篇参考段落
+
+#### Scenario: 官方宏库文档外链
+
+- **WHEN** 读者在 README `参考` 节查找 inline/try 或版本兼容说明
+- **THEN** MUST 能找到 `go-macro-contrib` 仓库 README 链接，且 MUST NOT 出现 OpenSpec 或 `openspec/` 路径
 
 ### Requirement: README 不含迁移与兼容说明
 
