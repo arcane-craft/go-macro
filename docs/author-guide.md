@@ -1,35 +1,64 @@
 # 宏作者指南
 
-## 框架契约
+面向**编写宏库**的开发者：如何搭骨架、实现展开、写单测。若你只是在项目里**使用**已有宏库，请直接看 [README 快速上手](../README.md#快速上手)。
 
-- Provider 包：`//macro: <syntax-id>` + `XxxExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error)`
-- **引入方式**：宏主文件必须 `import` 该 provider；expand 工具仅对**已 import 且已在 expand 二进制中 link** 的包注册并展开
-- 语法桩：包级 `panic` 函数，运行时不可调用
-- `ExpandResult`：`Stmts` / `Expr` / `Exprs`（`Exprs` 少用；`syntax-try` 在 `return` 语境禁止 `Exprs`）
-- `Context.EnclosingFunc`：首版必选（`*ast.FuncDecl` 或 `*ast.FuncLit`）
+## 阅读指引
+
+| 你是谁 | 从这里开始 |
+|--------|------------|
+| **编写**宏库 | [用脚手架初始化](#用脚手架初始化-provider) → [框架契约](#框架契约) |
+| 在工程里**使用**宏 | [README 快速上手](../README.md#快速上手)，或 [宏使用方](#宏使用方) |
+| 官方宏库、本地联调 | [参考](#参考) |
 
 ## 角色分工
 
-| 角色 | 负责 | 不负责 |
-|------|------|--------|
-| 框架 | `macro/expandtool`（Register / Run / Main） | 调用方具体 `cmd` 路径、唯一 expand 二进制 |
-| 宏作者（provider） | stubs、`Expand`、`//macro:`、`register/register.go`（脚手架） | expand main、`tools/macroexpand`、手写 linked map |
-| 宏使用方（含本仓 `examples`） | import 宏库；承载 expand 入口（自建 `cmd/macroexpand` 或使用推荐参考路径） | — |
-
-`examples` 是**示例宏调用方项目**，不是框架内置通用工具。`examples/cmd/macroexpand` 演示 blank import `go-macro-contrib/register` 并调用 `expandtool.Main()`；宏使用方 MAY 复制该模式到自有项目。
-
-## 调用语境（Site）
-
-| Site | 字段 |
+| 角色 | 职责 |
 |------|------|
-| 赋值 `:=` | `Stmts` |
-| `return` | `Stmts`（或罕见 `Exprs`） |
-| 语句 `Try0(...);` | `Stmts` |
-| 表达式 | `Expr` |
+| 框架 | 提供 `macro/expandtool`（Register / Run / Main） |
+| 宏作者 | 语法桩、`Expand`、`//macro:`、`register/`（脚手架会生成） |
+| 宏使用方 | import 宏库；在项目内自建 `cmd/macroexpand` 触发展开 |
 
-## 纯 Expand 单测
+本仓库 [`examples`](../examples/) 演示宏使用方如何接入，可参考 [`examples/cmd/macroexpand`](../examples/cmd/macroexpand/main.go)。
 
-使用 `macro/mactest`：
+## 编写宏库
+
+### 用脚手架初始化 provider
+
+在项目根目录执行：
+
+```bash
+go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider mymac
+```
+
+CLI 会生成最小单桩骨架和 `register/register.go`（在 `init` 里调用 `expandtool.Register`）。你接着实现 `Expand` 与语法桩即可。
+
+若他人要使用你的宏库，请让对方在其项目内自建 `cmd/macroexpand`（见 [README 快速上手](../README.md#快速上手)），不要长期依赖本仓库的 `examples/cmd/macroexpand` 路径。
+
+### 框架契约
+
+1. **语法标识**：在 provider 包注释里写 `//macro: <syntax-id>`（例如 `syntax-mine`）。
+2. **展开函数**：实现  
+   `XxxExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error)`。
+3. **引入与注册**：调用方源码须 `import` 你的 provider；expand 只会处理**已 import、且 expand 二进制已通过 `register` 登记**的宏库。
+4. **语法桩**：提供包级 `panic` 占位函数，供类型检查与 IDE 使用；正常运行时不会走到这些桩。
+5. **展开结果** `ExpandResult`：
+   - `Stmts`：一条或多条语句；
+   - `Expr`：单个表达式；
+   - `Exprs`：多个表达式（少用；在 `return` 位置尤其要谨慎）。
+6. **外层函数**：展开时可通过 `ctx.EnclosingFunc()` 拿到包住本次调用的函数（`*ast.FuncDecl` 或 `*ast.FuncLit`）。若生成代码需要参考外层 `return` 签名，从这里读取即可。
+
+### 宏出现的位置与返回字段
+
+| 宏写在哪里 | 通常返回 |
+|------------|----------|
+| 赋值右侧 `:=` | `Stmts` |
+| `return` 里 | `Stmts`（少数情况用 `Exprs`） |
+| 单独一条语句 | `Stmts` |
+| 表达式里 | `Expr` |
+
+### 纯 Expand 单测
+
+你不必先接完整 expand 流水线，可直接用 `macro/mactest` 验证展开逻辑：
 
 ```go
 result, err := mactest.Expand(MyExpand, "MyStub", "syntax-mine", `
@@ -38,58 +67,57 @@ func f() int { return 1 + MyStub(2) }
 `)
 ```
 
-## 使用方文件（方案 C）
+## 宏使用方
 
-- 主文件：`foo.go`，用户维护 `//go:build macro`（可与 `linux` 等合并）
-- 生成侧：`foo_macro_gen.go`，工具写入 `//go:build !macro ...`
-- 工具 **不** 修改主文件 build tag
-- 生成代码含 `//line foo.go:N` 指向宏主文件
+操作步骤以 [README 快速上手](../README.md#快速上手) 为准；下面是文件布局与入口要点。
 
-## init provider
+### build tag 与生成文件
 
-```bash
-go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider mymac
-```
+你会维护两份互斥的源码，这样日常编译走展开结果，编辑时仍可写带宏的「主文件」：
 
-生成最小单桩骨架与 `register/register.go`（`init` 内 `expandtool.Register`）。宏使用方展开用：
+- **宏主文件** `foo.go`：你手写宏调用，并加上 `//go:build macro`（可与 `linux` 等 tag 写在一起）。
+- **生成文件** `foo_macro_gen.go`：expand 工具生成，带 `//go:build !macro`；工具不会改你主文件上的 build tag。
+- 生成代码带 `//line foo.go:N`，报错行号会指回主文件。
 
-```go
-//go:generate go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand .
-```
+因此日常 `go build` / `go test` 用生成侧即可，一般不必长期加 `-tags macro`。
 
-## 术语澄清（无行为变更）
+### expand 入口
 
-规范层要求宏调用方项目承载 expand 入口（blank import `register` + `expandtool.Main()`）。`examples/cmd/macroexpand` 为推荐参考实现；文档中的 `go run .../examples/cmd/macroexpand` 推荐命令不变。
+使用宏的项目在 `cmd/macroexpand/main.go` 里 blank import 各宏库的 `register`，并调用 `expandtool.Main()`。
 
-## 发布 checklist（对外库）
+对照示例：[examples/cmd/macroexpand](../examples/cmd/macroexpand/main.go)、[examples/readfile](../examples/readfile/readfile.go)（含 `go:generate`）。
 
-1. `go run github.com/arcane-craft/go-macro/examples/cmd/macroexpand ./...`
-2. 提交 `*_macro_gen.go`
-3. `go test ./...`（无 `-tags macro`）
-4. CI 可选：`git diff --exit-code` 防止 gen 漂移
+### 发布前建议
 
-## 官方宏库（可选）
+库会被他人 `import`，且仓库里已有宏调用与 `*_macro_gen.go` 时，建议：
 
-独立仓库 `github.com/arcane-craft/go-macro-contrib`：`inline`、`try`。宏主文件 import 对应路径后，使用推荐参考入口 `go run .../examples/cmd/macroexpand`（已 blank import `go-macro-contrib/register`），或在项目内自建等价 `cmd/macroexpand` 即可展开。
+1. 跑一遍 expand（例如 `go run ./cmd/macroexpand ./...`）。
+2. 提交更新后的 `*_macro_gen.go`。
+3. 执行 `go test ./...`（不加 `-tags macro`）。
+4. （可选）CI 里用 `git diff --exit-code` 检查生成文件是否忘提交。
 
-- `syntax-inline`：`github.com/arcane-craft/go-macro-contrib/inline`
-- `syntax-try`：`github.com/arcane-craft/go-macro-contrib/try`
+## 参考
 
-本地联调：clone `go-macro-contrib` 至 `../go-macro-contrib`（与 `go-macro` 同级）。已提交的 `examples/go.mod` 通过 `require` 引用已发布 contrib；并行改 contrib 时 **MAY** 本地添加 `replace github.com/arcane-craft/go-macro-contrib => ../go-macro-contrib`（不必提交）。根目录 **MAY** 提供 `go.work`（`use` 为 `.` 与 `./examples`），**MUST NOT** 要求根 `go.work` 才能满足规范。测试：根 `GOWORK=off go test ./...`；examples 目录内 `go test ./...`。contrib 仓已提交 `go.mod` 以发布 tag `require` 为准；本地联调核心 **MAY** 在 `go-macro-contrib/go.mod` 添加 `replace github.com/arcane-craft/go-macro => ../go-macro`（不提交）。
+### 官方宏库
 
-## 附录：消费第三方宏库
+[go-macro-contrib](https://github.com/arcane-craft/go-macro-contrib) 提供例如：
 
-当除 `go-macro-contrib` 外还需其它带 `register` 子包的宏库时，使用方 MAY 复制 `examples/cmd/macroexpand` 到项目内，**仅**追加 blank import 该库的 `register` 包并仍调用 `expandtool.Main()`。无需手写 `linked` map，也无需 `tools/macroexpand`。
+| syntax-id | 模块路径 |
+|-----------|----------|
+| `syntax-inline` | `github.com/arcane-craft/go-macro-contrib/inline` |
+| `syntax-try` | `github.com/arcane-craft/go-macro-contrib/try` |
 
-第三方宏作者 MUST 提供 `register` 子包（`macro init provider` 脚手架已生成），**不必**维护 expand 二进制。
+在源码里 import 对应包，并在 `cmd/macroexpand` 里 blank import `go-macro-contrib/register` 后即可展开。
 
-### Try 桩族（附录）
+### 本地联调
 
-| 桩 | k |
-|----|---|
-| Try0 | 0 |
-| Try | 1 |
-| Try2 | 2 |
-| Try3 | 3 |
+- **contrib**：将 `go-macro-contrib` clone 到 `../go-macro-contrib`（与 `go-macro` 同级）。并行开发时可在本地加  
+  `replace github.com/arcane-craft/go-macro-contrib => ../go-macro-contrib`（通常不必提交）。
+- **go.work**：根目录可选用 `go.work`（`use` 为 `.` 与 `./examples`），不配置也能正常用框架。
+- **测试**：根目录 `GOWORK=off go test ./...`；`examples/` 下 `go test ./...`。
+- **联调 contrib 与核心**：可在 `go-macro-contrib/go.mod` 加  
+  `replace github.com/arcane-craft/go-macro => ../go-macro`（一般不提交）。
 
-内外层返回列表 **error 必须在最后**。
+### 消费其它第三方宏库
+
+除 contrib 外，你还可以在自建的 `cmd/macroexpand` 里多写一行 blank import 其它宏库的 `register`，仍调用 `expandtool.Main()`。第三方宏库作者用 `init provider` 脚手架即可带上 `register` 包。
