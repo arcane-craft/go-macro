@@ -48,10 +48,11 @@
 - MUST NOT 要求宏作者维护 `register/` 包
 - 语法桩为包级 `panic` 函数，运行时不可调用
 - **宏主文件中，已 link 注册的语法桩 MUST 仅以 `pkg.Stub(...)`（或 dot-import 下 `Stub(...)`）直接调用；MUST NOT 将桩作为函数值传递、赋值、返回或传入 `reflect.ValueOf` / `reflect.TypeOf`；违反时 expand MUST 失败（见 `macro-expander`）**
-- `ExpandResult` 的 `Stmts` / `Expr` / `Exprs` 及宏出现位置与返回字段的对应关系（MAY 以表格呈现，标题 MAY 不使用「Site」术语）
+- **`ExpandResult` MUST 设置显式 `Target`（`SpliceTarget`）**；MUST 说明各 `Target` 替换的 AST 范围及对应载荷字段（`Stmts` / `Expr` / `Exprs`）；MUST 说明 `ctx.LegalSpliceTargets()` 与 `mactest.Validate`（或等价）用于单测校验；MAY 保留「调用处语境」表作阅读辅助，但 MUST NOT 暗示仅凭填哪个字段即可贴回
+- MUST 说明 `SpliceReplaceAssignRHS`：保留赋值左侧，仅替换含宏调用的右侧表达式
 - 展开时 `Context` MUST 提供 `EnclosingFunc()`（`*ast.FuncDecl` 或 `*ast.FuncLit`），供 provider 读取外层函数语境
 - `init provider` 文档入口为 `go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider <name>`
-- 纯 Expand 单测使用 `macro/mactest` 的示例
+- 纯 Expand 单测使用 `macro/mactest` 的示例（含 `Validate`）
 
 #### Scenario: 契约与 macro-directive 对齐
 
@@ -62,6 +63,11 @@
 
 - **WHEN** 宏库作者或宏使用方阅读 `编写宏库` 或 `宏使用方`
 - **THEN** MUST 能找到「桩须直调、不可作函数值」的说明，且 MUST 指向 expand 期报错行为
+
+#### Scenario: 显式 Target 可查
+
+- **WHEN** 宏库作者阅读 `编写宏库` 中 ExpandResult 说明
+- **THEN** MUST 能找到 `Target` 与「替换整条语句 / 仅 RHS / 仅 CallExpr」的对照，且 MUST NOT 仅以「宏写在哪里 → 填 Stmts 或 Expr」隐式规则作为唯一说明
 
 ### Requirement: 宏使用方节保留 codegen 要点
 

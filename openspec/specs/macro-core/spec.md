@@ -5,7 +5,7 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 ## Requirements
 ### Requirement: 宏上下文 API
 
-`macro` 包 MUST 提供 `Context` 接口，至少包含：`FileSet`、`types.Info`、当前 `*types.Package`、宏调用 `*ast.CallExpr`、`StubName`、`SyntaxID`、`CallSiteKind`、**`EnclosingFunc`（`*ast.FuncDecl` 或 `*ast.FuncLit`，首版必选）**，以及生成临时标识符的能力（如 `TempIdent`）。
+`macro` 包 MUST 提供 `Context` 接口，至少包含：`FileSet`、**`File`（`*ast.File`，含本次宏调用的宏主文件）**、`types.Info`、当前 `*types.Package`、宏调用 `*ast.CallExpr`、`StubName`、`SyntaxID`、`CallSiteKind`、**`LegalSpliceTargets() []SpliceTarget`**、**`EnclosingFunc`（`*ast.FuncDecl` 或 `*ast.FuncLit`，首版必选）**，以及生成临时标识符的能力（如 `TempIdent`）。
 
 `EnclosingFunc` 为通用调用语境，供各 provider（如 contrib 仓 `syntax-try`、`syntax-inline`）自行解释；`macro` 包 MUST NOT 内置 error 位置、载荷个数 k 等 Try 专用规则（Try 规则见 contrib 仓 OpenSpec）。
 
@@ -23,20 +23,48 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 `macro` 包 MUST 定义：
 
-- `ExpandResult` 含可选字段 `Stmts []ast.Stmt`、`Exprs []ast.Expr`、`Expr ast.Expr`（首版 **保留 `Exprs`**，供罕见 return 表达式列表替换；contrib 仓 `syntax-try` 规范规定 `TryExpand` 在 `SiteReturn` 禁止使用 `Exprs`）
+- `SpliceTarget` 枚举，至少包含：`SpliceReplaceAssignStmt`、`SpliceReplaceAssignRHS`、`SpliceReplaceReturnStmt`、`SpliceReplaceReturnResults`、`SpliceReplaceExprStmt`、`SpliceReplaceCallExpr`
+- `ExpandResult` 含 **必填** 字段 `Target SpliceTarget`，以及载荷字段 `Stmts []ast.Stmt`、`Exprs []ast.Expr`、`Expr ast.Expr`；贴回语义 **仅** 由 `Target` 与对应载荷决定，MUST NOT 再依据「哪个字段非空」隐式推断贴回方式
 - `Expander func(ctx Context, call *ast.CallExpr) (ExpandResult, error)`
 
-Expander 函数 MUST 在**该函数**的 doc 中含 `//macro: <syntax-id>` 并符合 `Expander` 签名。语法桩 MUST 在**各桩函数**的 doc 中含 `//macro: <syntax-id>`。系统 MUST 支持多个 provider 并存（不同 `syntax-id`），规则仅存在于各 `Expand` 实现。
+各 `Target` 与载荷的对应关系 MUST 为：
 
-#### Scenario: 表达式宏
+| `Target` | 载荷 |
+|----------|------|
+| `SpliceReplaceAssignStmt` | 非空 `Stmts` |
+| `SpliceReplaceAssignRHS` | 非空 `Expr` |
+| `SpliceReplaceReturnStmt` | 非空 `Stmts` |
+| `SpliceReplaceReturnResults` | 非空 `Exprs` |
+| `SpliceReplaceExprStmt` | 非空 `Stmts` |
+| `SpliceReplaceCallExpr` | 非空 `Expr` |
 
-- **WHEN** 某宏在 `SiteExpr` 语境仅返回 `ExpandResult{Expr: e}`
-- **THEN** 类型与文档 MUST 允许该形式，且引擎仅替换 `CallExpr`
+每种 `Target` 下，其它载荷字段 MUST 为空（`Stmts`/`Exprs` 长度为 0，`Expr` 为 nil）。
 
-#### Scenario: 语句宏
+Expander 函数 MUST 在**该函数**的 doc 中含 `//macro: <syntax-id>` 并符合 `Expander` 签名。语法桩 MUST 在**各桩函数**的 doc 中含 `//macro: <syntax-id>`。
 
-- **WHEN** `TryExpand` 在 `SiteAssign` 展开
-- **THEN** MUST 返回非空 `Stmts` 以替换整条赋值语句
+`macro` 包 MUST 提供 `ValidateExpandResult(ctx Context, result ExpandResult) error`，校验 `Target`、载荷形状，以及 `Target` 是否属于 `ctx.LegalSpliceTargets()`。
+
+`CallSiteKind`（`Site()`）MAY 保留供 provider 语义分支，但 MUST NOT 作为引擎贴回依据。
+
+#### Scenario: 表达式宏显式 Target
+
+- **WHEN** 某宏在表达式槽展开并返回 `ExpandResult{Target: SpliceReplaceCallExpr, Expr: e}`
+- **THEN** `ValidateExpandResult` MUST 通过，且引擎 MUST 仅用 `e` 替换原宏 `CallExpr`
+
+#### Scenario: 赋值仅换 RHS
+
+- **WHEN** 某宏在 `x := Macro()` 处返回 `ExpandResult{Target: SpliceReplaceAssignRHS, Expr: e}`
+- **THEN** `ValidateExpandResult` MUST 通过，且引擎 MUST 保留 `AssignStmt.Lhs`、仅替换含 `Macro` 的 `Rhs` 元素
+
+#### Scenario: 语句宏替换整条 assign
+
+- **WHEN** `TryExpand` 在 `x := Try(...)` 处返回 `ExpandResult{Target: SpliceReplaceAssignStmt, Stmts: ...}`
+- **THEN** `ValidateExpandResult` MUST 通过，且引擎 MUST 用 `Stmts` 替换整条 `AssignStmt`
+
+#### Scenario: 隐式字段推断已移除
+
+- **WHEN** 某 `Expander` 返回 `ExpandResult{Stmts: ...}` 且未设置 `Target`（零值 unset）
+- **THEN** `ValidateExpandResult` MUST 失败
 
 ### Requirement: AST 节点抽象
 
@@ -63,7 +91,7 @@ Expander 函数 MUST 在**该函数**的 doc 中含 `//macro: <syntax-id>` 并�
 
 ### Requirement: 轻薄 AST 辅助（首版）
 
-`macro` 包首版 MUST 仅提供最小辅助（`Context`、`ExpandResult`、`TempIdent`、定位/错误辅助）。MUST NOT 在首版要求厚重 astbuilder；后续宏增多后再抽取。
+`macro` 包首版 MUST 提供最小辅助（`Context`、`ExpandResult`、`SpliceTarget`、`ValidateExpandResult`、`TempIdent`、定位/错误辅助）。MUST NOT 在首版要求厚重 astbuilder；后续宏增多后再抽取。
 
 #### Scenario: 首版无 astbuilder 依赖
 
@@ -74,10 +102,36 @@ Expander 函数 MUST 在**该函数**的 doc 中含 `//macro: <syntax-id>` 并�
 
 `macro` 包 MUST 提供 `mactest`（或等价子包），使 provider 作者在不使用 `//go:build macro`、不跑全链路 expand 的情况下，能构造 `Context` 并调用 `Expander` 做单元测试。
 
+`macro/mactest` MUST 提供对 `ValidateExpandResult` 的封装（如 `Validate(ctx, result) error`），使 provider 在单测中无需运行全链路 expand 即可验证 `Target` 与载荷是否合法。
+
 #### Scenario: TryExpand 单测
 
 - **WHEN** `try` 包测试调用 `mactest.Expand(TryExpand, snippet)`
 - **THEN** 测试 MUST 无需 macro tag 即可 `go test ./try/...`
+
+#### Scenario: mactest 校验非法 Target
+
+- **WHEN** 测试对 `return Macro()` 语境构造 `ExpandResult{Target: SpliceReplaceCallExpr, Expr: e}` 并调用 `mactest.Validate`
+- **THEN** MUST 返回错误，且错误 MUST 表明 `SpliceReplaceCallExpr` 不在合法目标集合中
+
+### Requirement: 合法贴回目标枚举
+
+`LegalSpliceTargetsForCall`（及 `Context.LegalSpliceTargets()`）MUST 与 `internal/expander` 锚点解析规则一致：
+
+- 若 `call` 为某 `AssignStmt.Rhs` 直接元素（剥除 `ParenExpr` 后比较），MUST 包含 `SpliceReplaceAssignRHS` 与 `SpliceReplaceAssignStmt`
+- 若 `call` 为某 `ReturnStmt.Results` 直接元素，MUST 包含 `SpliceReplaceReturnResults` 与 `SpliceReplaceReturnStmt`
+- 若 `call` 为某 `ExprStmt.X` 的直接子表达式，MUST 包含 `SpliceReplaceExprStmt` 与 `SpliceReplaceCallExpr`
+- 否则 MUST 仅包含 `SpliceReplaceCallExpr`
+
+#### Scenario: assign 处枚举两种 Target
+
+- **WHEN** 宏调用为 `x := Macro()` 中的 `Macro(...)`
+- **THEN** `LegalSpliceTargets()` MUST 包含 `SpliceReplaceAssignRHS` 与 `SpliceReplaceAssignStmt`
+
+#### Scenario: 表达式槽仅 CallExpr
+
+- **WHEN** 宏调用为 `1 + Macro(2)` 中的 `Macro(2)`
+- **THEN** `LegalSpliceTargets()` MUST 仅包含 `SpliceReplaceCallExpr`
 
 ### Requirement: init provider 脚手架
 

@@ -11,7 +11,7 @@ import (
 func TestRegistryRegisterStubAndSyntax(t *testing.T) {
 	r := macro.NewRegistry()
 	expand := func(macro.Context, *ast.CallExpr) (macro.ExpandResult, error) {
-		return macro.ExpandResult{Expr: ast.NewIdent("1")}, nil
+		return macro.ExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: ast.NewIdent("1")}, nil
 	}
 	r.RegisterSyntax("syntax-a", expand)
 	r.RegisterImportExpander("example.com/p", expand)
@@ -79,10 +79,10 @@ func XExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error) 
 	}
 	r := macro.NewRegistry()
 	expA := func(macro.Context, *ast.CallExpr) (macro.ExpandResult, error) {
-		return macro.ExpandResult{Expr: ast.NewIdent("a")}, nil
+		return macro.ExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: ast.NewIdent("a")}, nil
 	}
 	expB := func(macro.Context, *ast.CallExpr) (macro.ExpandResult, error) {
-		return macro.ExpandResult{Expr: ast.NewIdent("b")}, nil
+		return macro.ExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: ast.NewIdent("b")}, nil
 	}
 	if err := r.RegisterProvider("a.com/p", makeFiles("p", "Macro"), expA); err != nil {
 		t.Fatal(err)

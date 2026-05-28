@@ -44,7 +44,7 @@ func (e *Engine) ExpandFile(
 		if enc == nil {
 			return macro.ErrorAt(fset, mc.Call.Pos(), "macro call must appear inside a function")
 		}
-		ctx, err := macro.NewContext(fset, info, pkg, mc.Call, mc.StubName, mc.SyntaxID, site, enc)
+		ctx, err := macro.NewContext(fset, file, info, pkg, mc.Call, mc.StubName, mc.SyntaxID, site, enc)
 		if err != nil {
 			return err
 		}
@@ -52,7 +52,10 @@ func (e *Engine) ExpandFile(
 		if err != nil {
 			return err
 		}
-		if err := ApplyExpandResult(file, mc.Call, site, result); err != nil {
+		if err := macro.ValidateExpandResult(ctx, result); err != nil {
+			return macro.ErrorAt(fset, mc.Call.Pos(), "%s", err.Error())
+		}
+		if err := ApplyExpandResult(file, mc.Call, result); err != nil {
 			return macro.ErrorAt(fset, mc.Call.Pos(), "%s", err.Error())
 		}
 	}

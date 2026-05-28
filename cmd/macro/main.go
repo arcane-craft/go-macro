@@ -104,7 +104,7 @@ func MacroExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, err
 	if len(call.Args) != 1 {
 		return macro.ExpandResult{}, macro.ErrorAt(ctx.FileSet(), ctx.MacroPos(), "Macro expects one argument")
 	}
-	return macro.ExpandResult{Expr: call.Args[0]}, nil
+	return macro.ExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: call.Args[0]}, nil
 }
 `, name, syntaxID),
 		"expand_test.go": fmt.Sprintf(`package %s_test

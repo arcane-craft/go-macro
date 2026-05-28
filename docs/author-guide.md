@@ -76,20 +76,29 @@ func XxxExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error
 - 建议函数体 `panic(...)`，避免运行时被误调用
 - 在宏主文件中，**已 link 注册的**语法桩只能写成直调：`pkg.Stub(...)`（或 dot-import 下的 `Stub(...)`）。不要把桩当作普通函数值传递、赋值、返回，也不要传给 `reflect.ValueOf` / `reflect.TypeOf`；违反时 `expand` 会报错
 
-#### 5. ExpandResult 与调用位置
+#### 5. ExpandResult：显式贴回目标（Target）
 
-| 宏写在哪里 | 通常返回 |
-|------------|----------|
-| 赋值右侧 `:=` | `Stmts` |
-| `return` 里 | `Stmts`（少数情况用 `Exprs`） |
-| 单独一条语句 | `Stmts` |
-| 表达式里 | `Expr` |
+`ExpandResult` **必须**设置 `Target`（`macro.SpliceTarget`），指明要替换的 AST 范围；引擎按 `Target` 贴回，**不再**根据「填了哪个字段」隐式推断。
 
-字段含义：
+| `Target` | 替换范围 | 载荷 |
+|----------|----------|------|
+| `SpliceReplaceAssignStmt` | 整条赋值语句 | 非空 `Stmts` |
+| `SpliceReplaceAssignRHS` | 仅赋值右侧含宏的那一项（**保留左侧**） | 非空 `Expr` |
+| `SpliceReplaceReturnStmt` | 整条 `return` 语句 | 非空 `Stmts` |
+| `SpliceReplaceReturnResults` | 仅 `return` 的返回值列表 | 非空 `Exprs` |
+| `SpliceReplaceExprStmt` | 整条表达式语句 | 非空 `Stmts` |
+| `SpliceReplaceCallExpr` | 仅宏 `CallExpr`（表达式槽） | 非空 `Expr` |
 
-- `Stmts` — 一条或多条语句，替换整条语句或赋值
-- `Expr` — 单个表达式，替换宏调用处
-- `Exprs` — 多个表达式（少用；在 `return` 位置尤其要谨慎）
+调用处语境（便于选 Target，**不以 `ctx.Site()` 单独决定贴回**）：
+
+| 宏写在哪里 | 可选 `Target`（见 `ctx.LegalSpliceTargets()`） |
+|------------|--------------------------------------------------|
+| 赋值右侧 `:=` / `=` | `SpliceReplaceAssignRHS`、`SpliceReplaceAssignStmt` |
+| `return` 里 | `SpliceReplaceReturnResults`、`SpliceReplaceReturnStmt` |
+| 单独一条语句 | `SpliceReplaceExprStmt`（亦可 `SpliceReplaceCallExpr` 只换调用） |
+| 表达式里 | `SpliceReplaceCallExpr` |
+
+单测建议：展开后用 `mactest.Validate(ctx, result)` 校验 `Target` 与载荷是否与调用处一致。
 
 #### 6. 外层函数语境
 
@@ -107,6 +116,7 @@ func f() int { return 1 + Mine(2) }
 if err != nil {
     t.Fatal(err)
 }
+// 可选：在同一 snippet 上构造 ctx 后调用 mactest.Validate(ctx, result)
 ```
 
 ## 宏使用方

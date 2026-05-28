@@ -29,9 +29,8 @@ func f() (int, error) {
 		t.Fatalf("calls: %v err=%v", calls, err)
 	}
 	mc := calls[0]
-	site := classifySiteInFile(file, mc.Call)
 	result := stubTryAssignExpandResult(mc.Call)
-	if err := ApplyExpandResult(file, mc.Call, site, result); err != nil {
+	if err := ApplyExpandResult(file, mc.Call, result); err != nil {
 		t.Fatal(err)
 	}
 	body := formatFuncBody(t, fset, file, "f")
@@ -51,7 +50,7 @@ func TestApplyExpandResultSiteExpr(t *testing.T) {
 	_, f, call := parseFileSplice(t, `package p
 func f() int { return 1 + M(2) }
 `)
-	if err := ApplyExpandResult(f, call, macro.SiteExpr, macro.ExpandResult{Expr: ast.NewIdent("9")}); err != nil {
+	if err := ApplyExpandResult(f, call, macro.ExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: ast.NewIdent("9")}); err != nil {
 		t.Fatal(err)
 	}
 	ret := f.Decls[0].(*ast.FuncDecl).Body.List[0].(*ast.ReturnStmt)
@@ -72,7 +71,8 @@ func g() (int, error) { return 0, nil }
 func cleanup() {}
 `)
 	block, _, _ := findEnclosingBlockStmt(f, call)
-	if err := ApplyExpandResult(f, call, macro.SiteAssign, macro.ExpandResult{
+	if err := ApplyExpandResult(f, call, macro.ExpandResult{
+		Target: macro.SpliceReplaceAssignStmt,
 		Stmts: []ast.Stmt{
 			&ast.AssignStmt{Tok: token.DEFINE, Lhs: []ast.Expr{ast.NewIdent("a")}, Rhs: []ast.Expr{ast.NewIdent("b")}},
 			&ast.AssignStmt{Tok: token.ASSIGN, Lhs: []ast.Expr{ast.NewIdent("x")}, Rhs: []ast.Expr{ast.NewIdent("a")}},
@@ -93,18 +93,57 @@ func TestApplyExpandResultErrors(t *testing.T) {
 func f() { M(1) }
 `)
 	for _, tc := range []struct {
-		site macro.CallSiteKind
 		res  macro.ExpandResult
 		frag string
 	}{
-		{macro.SiteAssign, macro.ExpandResult{}, "SiteAssign requires Stmts"},
-		{macro.SiteReturn, macro.ExpandResult{}, "SiteReturn requires"},
-		{macro.SiteExpr, macro.ExpandResult{}, "SiteExpr requires Expr"},
+		{macro.ExpandResult{}, "Target is required"},
+		{macro.ExpandResult{Target: macro.SpliceReplaceExprStmt}, "requires non-empty Stmts"},
+		{macro.ExpandResult{Target: macro.SpliceReplaceCallExpr}, "requires Expr"},
 	} {
-		err := ApplyExpandResult(f, call, tc.site, tc.res)
+		err := ApplyExpandResult(f, call, tc.res)
 		if err == nil || !strings.Contains(err.Error(), tc.frag) {
-			t.Fatalf("site %d: got %v want %q", tc.site, err, tc.frag)
+			t.Fatalf("got %v want fragment %q", err, tc.frag)
 		}
+	}
+}
+
+func TestApplyExpandResultReplaceAssignRHS(t *testing.T) {
+	_, f, call := parseFileSplice(t, `package p
+func f() int {
+	x := M(helper())
+	return x
+}
+func helper() int { return 1 }
+`)
+	if err := ApplyExpandResult(f, call, macro.ExpandResult{
+		Target: macro.SpliceReplaceAssignRHS,
+		Expr:   ast.NewIdent("42"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	fn := f.Decls[0].(*ast.FuncDecl)
+	assign := fn.Body.List[0].(*ast.AssignStmt)
+	if len(assign.Lhs) != 1 {
+		t.Fatalf("lhs: %#v", assign.Lhs)
+	}
+	if id, ok := assign.Lhs[0].(*ast.Ident); !ok || id.Name != "x" {
+		t.Fatalf("lhs: %#v", assign.Lhs[0])
+	}
+	if id, ok := assign.Rhs[0].(*ast.Ident); !ok || id.Name != "42" {
+		t.Fatalf("rhs: %#v", assign.Rhs[0])
+	}
+}
+
+func TestApplyExpandResultInvalidTargetAtReturn(t *testing.T) {
+	_, f, call := parseFileSplice(t, `package p
+func f() int { return M(1) }
+`)
+	err := ApplyExpandResult(f, call, macro.ExpandResult{
+		Target: macro.SpliceReplaceCallExpr,
+		Expr:   ast.NewIdent("1"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "legal targets") {
+		t.Fatalf("got %v", err)
 	}
 }
 
@@ -229,7 +268,10 @@ func stubTryAssignExpandResult(call *ast.CallExpr) macro.ExpandResult {
 		Lhs: []ast.Expr{ast.NewIdent("x")},
 		Rhs: []ast.Expr{valIdent},
 	}
-	return macro.ExpandResult{Stmts: []ast.Stmt{assign, ifStmt, success}}
+	return macro.ExpandResult{
+		Target: macro.SpliceReplaceAssignStmt,
+		Stmts:  []ast.Stmt{assign, ifStmt, success},
+	}
 }
 
 func registerTryProvider(t *testing.T, fset *token.FileSet) *macro.Registry {

@@ -1,4 +1,10 @@
 // Package mactest helps provider authors test Expander functions without full macro expand.
+//
+// After Expand, call Validate to check Target and payload against the call site:
+//
+//	result, err := mactest.Expand(exp, "Stub", "syntax-id", snippet)
+//	if err != nil { ... }
+//	if err := mactest.Validate(ctx, result); err != nil { ... }
 package mactest
 
 import (
@@ -11,6 +17,11 @@ import (
 
 	"github.com/arcane-craft/go-macro/macro"
 )
+
+// Validate checks ExpandResult Target and payload for the call site in ctx.
+func Validate(ctx macro.Context, result macro.ExpandResult) error {
+	return macro.ValidateExpandResult(ctx, result)
+}
 
 // Expand parses snippet as a package body, finds the first macro CallExpr named stubName,
 // type-checks, and invokes expand.
@@ -72,7 +83,7 @@ func Expand(expand macro.Expander, stubName, syntaxID string, snippet string) (m
 	}
 
 	site := classifySite(f, call)
-	ctx, err := macro.NewContext(fset, info, pkg, call, stubName, syntaxID, site, enclosing)
+	ctx, err := macro.NewContext(fset, f, info, pkg, call, stubName, syntaxID, site, enclosing)
 	if err != nil {
 		return macro.ExpandResult{}, err
 	}

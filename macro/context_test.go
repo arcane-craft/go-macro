@@ -41,7 +41,7 @@ func f() int { return Macro(1) }
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, err := macro.NewContext(fset, info, pkg, call, "Macro", "syntax-x", macro.SiteReturn, fn)
+	ctx, err := macro.NewContext(fset, f, info, pkg, call, "Macro", "syntax-x", macro.SiteReturn, fn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func f() int { return Macro(1) }
 
 func TestNewContextInvalidEnclosing(t *testing.T) {
 	fset := token.NewFileSet()
-	_, err := macro.NewContext(fset, nil, nil, nil, "X", "s", macro.SiteExpr, &ast.BlockStmt{})
+	_, err := macro.NewContext(fset, nil, nil, nil, nil, "X", "s", macro.SiteExpr, &ast.BlockStmt{})
 	if err == nil {
 		t.Fatal("expected error for BlockStmt enclosing")
 	}

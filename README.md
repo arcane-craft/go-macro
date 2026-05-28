@@ -2,6 +2,8 @@
 
 Go 过程宏框架。
 
+> **Breaking（未发版）**：`macro.ExpandResult` 现需显式设置 `Target`（`SpliceTarget`）；见 [宏作者指南 — ExpandResult](docs/author-guide.md#5-expandresult显式贴回目标target)。`macro.NewContext` 增加 `file *ast.File` 参数；`Context` 新增 `File()`、`LegalSpliceTargets()`。
+
 ## 阅读指引
 
 | 你是谁 | 从这里开始 |

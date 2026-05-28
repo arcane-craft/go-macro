@@ -50,7 +50,7 @@ func TestExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, erro
 }
 
 func TestContextRequiresEnclosingFunc(t *testing.T) {
-	_, err := macro.NewContext(token.NewFileSet(), nil, nil, nil, "X", "syntax-x", macro.SiteExpr, nil)
+	_, err := macro.NewContext(token.NewFileSet(), nil, nil, nil, nil, "X", "syntax-x", macro.SiteExpr, nil)
 	if err == nil {
 		t.Fatal("expected error without enclosing func")
 	}

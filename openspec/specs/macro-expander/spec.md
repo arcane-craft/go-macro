@@ -46,27 +46,57 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 ### Requirement: ExpandResult 贴回（splice）
 
-引擎 MUST 按 `ctx.Site()` 与 `ExpandResult` 字段贴回 AST：
+引擎 MUST 按 `ExpandResult.Target` 与对应载荷贴回 AST。引擎 MUST 在贴回前调用 `macro.ValidateExpandResult`（或等价校验）。引擎 MUST NOT 依据 `ctx.Site()` 选择贴回字段；`Site()` 仅用于 provider 语义与错误提示。
 
-| Site | 字段 | 行为 |
-|------|------|------|
-| `SiteAssign` | `Stmts` | 替换整条 `AssignStmt` |
-| `SiteReturn` | `Stmts` | 替换整条 `ReturnStmt` |
-| `SiteStmt` | `Stmts` | 替换 `ExprStmt` |
-| `SiteExpr` | `Expr` | 仅替换 `CallExpr` |
-| `SiteReturn` | `Exprs` | 仅替换 `ReturnStmt` 的 Results 列表（首版保留；contrib 仓 `syntax-try` 规范规定 `TryExpand` 在 `SiteReturn` 不得使用 `Exprs`） |
+| `Target` | 行为 |
+|----------|------|
+| `SpliceReplaceAssignStmt` | 替换整条 `AssignStmt` 为 `Stmts` |
+| `SpliceReplaceAssignRHS` | 在 enclosing `AssignStmt.Rhs` 中定位宏 `CallExpr` 所在槽位，仅用 `Expr` 替换该槽位；`Lhs` MUST 不变 |
+| `SpliceReplaceReturnStmt` | 替换整条 `ReturnStmt` 为 `Stmts` |
+| `SpliceReplaceReturnResults` | 仅将 `ReturnStmt.Results` 设为 `Exprs` |
+| `SpliceReplaceExprStmt` | 替换整条 `ExprStmt` 为 `Stmts` |
+| `SpliceReplaceCallExpr` | 在表达式槽中用 `Expr` 替换宏 `CallExpr`（含 `BinaryExpr`、`CallExpr` 参数、`CompositeLit` 等父节点） |
 
-若字段与 Site 不匹配，MUST 报错。引擎 MUST NOT 对任何 `syntax-id` 硬编码分支；贴回规则仅依赖上表。
+若 `Target` 不在当前调用处的结构合法集合内，或载荷与 `Target` 不匹配，MUST 报错。错误信息 MUST 含文件名与行号，并 SHOULD 列出 `LegalSpliceTargets()` 允许的目标名称。引擎 MUST NOT 对任何 `syntax-id` 硬编码 splice 分支。
 
-#### Scenario: return 语境使用 Stmts（引擎行为）
+#### Scenario: assign 仅换 RHS
 
-- **WHEN** 某 `Expander`（如 contrib 仓的 `TryExpand`）对 `SiteReturn` 返回非空 `Stmts`
+- **WHEN** 某 `Expander` 对 `x := Macro()` 返回 `Target: SpliceReplaceAssignRHS` 与 `Expr: e`
+- **THEN** 引擎 MUST 保留 `x` 在 `Lhs` 中，且 `Rhs` 中含宏的项 MUST 变为 `e`
+
+#### Scenario: return 语境替换整条 return
+
+- **WHEN** 某 `Expander`（如 contrib 仓 `TryExpand`）对 `return Macro(...)` 返回 `Target: SpliceReplaceReturnStmt` 与非空 `Stmts`
 - **THEN** 引擎 MUST 用 `Stmts` 替换整条 `return` 语句
+
+#### Scenario: return 语境仅换 Results
+
+- **WHEN** 某 `Expander` 对 `return Macro(...)` 返回 `Target: SpliceReplaceReturnResults` 与非空 `Exprs`
+- **THEN** 引擎 MUST 仅替换 `ReturnStmt.Results`，且 MUST NOT 替换整条 `ReturnStmt` 为语句块
 
 #### Scenario: 表达式宏替换 CallExpr
 
-- **WHEN** 某 `Expander` 在 `SiteExpr` 返回 `ExpandResult{Expr: x}`
+- **WHEN** 某 `Expander` 对表达式槽宏返回 `Target: SpliceReplaceCallExpr` 与 `Expr: x`
 - **THEN** 引擎 MUST 仅用 `x` 替换原宏 `CallExpr`
+
+#### Scenario: Target 与锚点不一致
+
+- **WHEN** 宏位于 `return Macro()` 但 `Expander` 返回 `Target: SpliceReplaceCallExpr`
+- **THEN** expand MUST 失败，且 MUST NOT 写回部分展开结果
+
+#### Scenario: 载荷与 Target 不匹配
+
+- **WHEN** `Expander` 返回 `Target: SpliceReplaceAssignRHS` 且 `Expr` 为 nil
+- **THEN** expand MUST 失败
+
+### Requirement: ApplyExpandResult 不依赖 CallSiteKind
+
+`ApplyExpandResult`（或等价 splice 入口）MUST 仅接受 `file`、`call`、`ExpandResult`；MUST NOT 将 `CallSiteKind` 作为贴回分支条件。
+
+#### Scenario: Site 与 Target 解耦
+
+- **WHEN** `ctx.Site()` 为 `SiteAssign` 但 `ExpandResult.Target` 为 `SpliceReplaceCallExpr` 且宏在 assign RHS
+- **THEN** splice MUST 失败（即使 `Site` 为 assign 语境）
 
 ### Requirement: 展开错误报告
 
