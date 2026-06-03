@@ -40,48 +40,58 @@
 
 ### Requirement: 编写宏库保留 normative 契约要点
 
-`编写宏库` MUST 包含且保持与 `macro-core`、`macro-codegen`、`macro-directive` 一致的下列语义（正文 MAY 使用自然语言，不必逐字保留 RFC 2119 英文关键词或设计文档内部代号如「方案 C」「首版」）：
+`编写宏库` MUST 包含且保持与 `macro-core`、`macro-codegen`、`decl-macro` 一致的下列语义：
 
-- 每个语法桩与 Expander 的 doc MUST 含 `//macro: <syntax-id>`；同一 syntax-id 下多桩共享一个 Expander
-- Provider：`Expand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error)` 签名约定
-- 宏主文件 MUST import provider；`cmd/macro expand` 仅对已 import 且已生成 link 的 provider 展开
-- MUST NOT 要求宏作者维护 `register/` 包
-- 语法桩为包级 `panic` 函数，运行时不可调用
-- **宏主文件中，已 link 注册的语法桩 MUST 仅以 `pkg.Stub(...)`（或 dot-import 下 `Stub(...)`）直接调用；MUST NOT 将桩作为函数值传递、赋值、返回或传入 `reflect.ValueOf` / `reflect.TypeOf`；违反时 expand MUST 失败（见 `macro-expander`）**
-- **`ExpandResult` MUST 设置显式 `Target`（`SpliceTarget`）**；MUST 说明各 `Target` 替换的 AST 范围及对应载荷字段（`Stmts` / `Expr` / `Exprs`）；MUST 说明 `ctx.LegalSpliceTargets()` 与 `mactest.Validate`（或等价）用于单测校验；MAY 保留「调用处语境」表作阅读辅助，但 MUST NOT 暗示仅凭填哪个字段即可贴回
-- MUST 说明 `SpliceReplaceAssignRHS`：保留赋值左侧，仅替换含宏调用的右侧表达式
-- 展开时 `Context` MUST 提供 `EnclosingFunc()`（`*ast.FuncDecl` 或 `*ast.FuncLit`），供 provider 读取外层函数语境
-- `init provider` 文档入口为 `go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider <name>`
-- 纯 Expand 单测使用 `macro/mactest` 的示例（含 `Validate`）
+**过程宏（Call）**
 
-#### Scenario: 契约与 macro-directive 对齐
+- 语法桩为包级 `panic` 函数，doc 含 `//macro: <syntax-id>`
+- **`CallExpander(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandResult, error)`**
+- **`CallExpandResult` MUST 设置 `Target`（`SpliceTarget`）**；说明 `ctx.LegalSpliceTargets()` 与 `mactest.ValidateCall`
+- 桩须直调，不可作函数值（见 `macro-expander`）
 
-- **WHEN** 读者对照 `macro-directive` 与 `macro-core` 要求
-- **THEN** author-guide `编写宏库` MUST 说明 per-function `//macro:`，且 MUST NOT 将 `register/` 列为作者职责
+**声明宏（Decl）**
 
-#### Scenario: 值用法约束可查
+- marker 为类型定义，类型 doc 含 `//macro: <syntax-id>`
+- 使用方通过 struct **匿名嵌入** marker；可选参数仅 `` `macro:"k=v"` ``
+- **`DeclExpander(ctx macro.DeclContext, site macro.DeclSite) (macro.DeclExpandResult, error)`**
+- 成功时 **`Fields` 与 `Methods` 均 MUST 全量**返回；`mactest.ValidateDecl`
+- marker 类型内 struct 字段仅作文档提示，引擎不读取
+- Decl 作用域：仅 Target 的字段与方法；MUST NOT 生成包级 const/var、其它类型、独立测试文件
 
-- **WHEN** 宏库作者或宏使用方阅读 `编写宏库` 或 `宏使用方`
-- **THEN** MUST 能找到「桩须直调、不可作函数值」的说明，且 MUST 指向 expand 期报错行为
+**通用**
+
+- 同一 provider 包 **允许多个 syntax-id**；Call 与 Decl Expander **分别 link**
+- 宏主文件 MUST import provider；`cmd/macro expand` 仅对已 import 且已 link 的 syntax 展开
+- MUST NOT 要求 `register/` 包
+
+#### Scenario: Call 与 Decl 签名可查
+
+- **WHEN** 宏库作者阅读 `编写宏库`
+- **THEN** MUST 能区分 `CallExpander` 与 `DeclExpander` 签名及触发方式
+
+#### Scenario: Decl Marker 模板可查
+
+- **WHEN** 作者实现声明宏
+- **THEN** MUST 能找到无参 / `Marker[T]` / `` `macro:"..."` `` 模板说明
 
 #### Scenario: 显式 Target 可查
 
-- **WHEN** 宏库作者阅读 `编写宏库` 中 ExpandResult 说明
-- **THEN** MUST 能找到 `Target` 与「替换整条语句 / 仅 RHS / 仅 CallExpr」的对照，且 MUST NOT 仅以「宏写在哪里 → 填 Stmts 或 Expr」隐式规则作为唯一说明
+- **WHEN** 作者阅读 Call 宏 ExpandResult 说明
+- **THEN** MUST 能找到 `Target` 与 splice 范围对照表
 
 ### Requirement: 宏使用方节保留 codegen 要点
 
-`宏使用方` MUST 说明（语义与 `macro-codegen` 一致，文案 MAY 简化）：
+`宏使用方` MUST 说明：
 
 - 宏主文件与 `*_macro_gen.go` 的 build tag 分工
-- `go:generate` 调用 `cmd/macro expand`（或等价）生成侧文件
-- 发布前在带/不带 `macro` tag 下测试的建议
-- **已 link 的语法桩在宏主文件中 MUST 直接调用；将桩作为参数、变量或反射对象会导致 expand 失败**
+- **生成侧含展开后的类型、方法与函数**（不仅函数）
+- expand 顺序：引擎先 Decl 后 Call（使用者通常无感，MAY 一句带过）
+- 桩直调与 Decl 嵌入规则
 
-#### Scenario: 使用方知悉 expand 约束
+#### Scenario: gen 含类型
 
-- **WHEN** 仅使用已有宏库的读者阅读 `宏使用方`
-- **THEN** MUST 能理解 `import` 宏库后应写 `try.Try(...)` 一类直调，且 MUST NOT 依赖将 `try.Try` 当作普通函数值
+- **WHEN** 使用方阅读 `宏使用方`
+- **THEN** MUST 理解 `!macro` 构建下类型定义来自 `*_macro_gen.go`
 
 ### Requirement: 参考内容与主路径分离
 
@@ -127,4 +137,17 @@ author-guide MUST 在 `阅读指引` 或首段链至根目录 `README.md`（快�
 
 - **WHEN** 读者需要 ignore/tag 或 provider 实现细节
 - **THEN** README `文档` 节 MUST 链至 author-guide；author-guide MUST 链回 README 供使用方跳转
+
+### Requirement: 声明宏作者指南子节
+
+`编写宏库` MUST 含 `###` 或等价子节「声明宏（Decl）」或并入「框架契约」，说明：
+
+- Marker 四种模板（无参、`[T]`、tag、组合）
+- `DeclExpandResult` 全量 `Fields`/`Methods` 义务
+- Contract 与 Wire 首期场景示例指向 contrib：`github.com/arcane-craft/go-macro-contrib/derivestringer`、`.../wirejson`
+
+#### Scenario: 全量 Methods 义务可查
+
+- **WHEN** 作者阅读 Decl 契约
+- **THEN** MUST 明确「成功返回须包含 Target 全部方法，漏方法即丢失」
 

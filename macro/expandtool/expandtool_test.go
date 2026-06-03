@@ -8,31 +8,30 @@ import (
 	"github.com/arcane-craft/go-macro/macro/expandtool"
 )
 
-func noopExpand(macro.Context, *ast.CallExpr) (macro.ExpandResult, error) {
-	return macro.ExpandResult{}, nil
+func noopExpand(macro.CallContext, *ast.CallExpr) (macro.CallExpandResult, error) {
+	return macro.CallExpandResult{}, nil
 }
 
-func TestRegisteredReturnsCopy(t *testing.T) {
-	const path = "example.com/copy-test"
-	expandtool.Register(path, noopExpand)
-	t.Cleanup(func() { expandtool.Register(path, nil) })
+func TestRegisteredCallReturnsCopy(t *testing.T) {
+	const sid = "syntax-copy-test"
+	expandtool.RegisterCall(sid, noopExpand)
+	t.Cleanup(func() { expandtool.RegisterCall(sid, nil) })
 
-	got := expandtool.Registered()
+	got := expandtool.RegisteredCall()
 	got["other"] = noopExpand
-	if _, ok := expandtool.Registered()[path]; !ok {
-		t.Fatal("Registered missing registered path")
+	if _, ok := expandtool.RegisteredCall()[sid]; !ok {
+		t.Fatal("RegisteredCall missing registered syntax-id")
 	}
-	if _, ok := expandtool.Registered()["other"]; ok {
-		t.Fatal("Registered must not reflect caller mutations")
+	if _, ok := expandtool.RegisteredCall()["other"]; ok {
+		t.Fatal("RegisteredCall must not reflect caller mutations")
 	}
 }
 
 func TestRunNilLinkedUsesRegistered(t *testing.T) {
-	const path = "example.com/nil-linked"
-	expandtool.Register(path, noopExpand)
-	t.Cleanup(func() { expandtool.Register(path, nil) })
+	const sid = "syntax-nil-linked"
+	expandtool.RegisterCall(sid, noopExpand)
+	t.Cleanup(func() { expandtool.RegisterCall(sid, nil) })
 
-	// Vacuous expand: no macro main files under this package's test scope.
 	if err := expandtool.Run([]string{"./..."}, nil); err != nil {
 		t.Fatalf("Run with nil linked: %v", err)
 	}
@@ -41,16 +40,18 @@ func TestRunNilLinkedUsesRegistered(t *testing.T) {
 func TestRunDefaultPatterns(t *testing.T) {
 	var nilArgs []string
 	var emptyArgs []string
-	if err := expandtool.Run(nilArgs, map[string]macro.Expander{}); err != nil {
+	linked := &macro.LinkedExpanders{Call: map[string]macro.CallExpander{}}
+	if err := expandtool.Run(nilArgs, linked); err != nil {
 		t.Fatalf("Run(nil, {}): %v", err)
 	}
-	if err := expandtool.Run(emptyArgs, map[string]macro.Expander{}); err != nil {
+	if err := expandtool.Run(emptyArgs, linked); err != nil {
 		t.Fatalf("Run([]string{}, {}): %v", err)
 	}
 }
 
 func TestRunPropagatesError(t *testing.T) {
-	err := expandtool.Run([]string{"\x00invalid"}, map[string]macro.Expander{})
+	linked := &macro.LinkedExpanders{Call: map[string]macro.CallExpander{}}
+	err := expandtool.Run([]string{"\x00invalid"}, linked)
 	if err == nil {
 		t.Fatal("expected error from invalid pattern")
 	}

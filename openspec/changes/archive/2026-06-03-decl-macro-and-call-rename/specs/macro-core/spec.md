@@ -1,8 +1,5 @@
-# macro-core Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change go-macro-extension. Update Purpose after archive.
-## Requirements
 ### Requirement: 宏上下文 API
 
 `macro` 包 MUST 提供 **`CallContext`** 接口（过程宏 / 调用点宏），至少包含：`FileSet`、**`File`（`*ast.File`）**、`types.Info`、当前 `*types.Package`、宏调用 `*ast.CallExpr`、`StubName`、`SyntaxID`、`CallSiteKind`、**`LegalSpliceTargets() []SpliceTarget`**、**`EnclosingFunc`（`*ast.FuncDecl` 或 `*ast.FuncLit`）**、生成临时标识符（`TempIdent`）、`MacroPos()`。
@@ -92,26 +89,6 @@ Call 宏识别 MUST 使用 `(syntax-id 或 importPath, stubFuncName)` 查找 `Ca
 - **WHEN** 宏调用为 `x := Macro()` 中的 `Macro(...)`
 - **THEN** `LegalSpliceTargets()` MUST 包含 `SpliceReplaceAssignRHS` 与 `SpliceReplaceAssignStmt`
 
-### Requirement: init provider 脚手架
-
-`github.com/arcane-craft/go-macro/cmd/macro` MUST 提供 `init provider` 子命令，生成**最小** provider 目录：含 `//macro:`、`Expand` 占位、**单个** panic 语法桩及 `expand_test.go`（mactest 模板）；MUST NOT 默认生成 Try 式多桩族模板。
-
-用户文档 RECOMMENDED 通过 `go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider <name>` 调用该子命令（`go tool macro` MAY 在已安装 tool 的环境下使用，但 MUST NOT 作为唯一文档入口）。
-
-#### Scenario: 初始化新 provider
-
-- **WHEN** 用户执行 `go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider mymac`
-- **THEN** MUST 创建可编译的 provider 骨架且文档指向作者指南
-
-### Requirement: 语法桩运行时防护
-
-provider 包内的语法桩（包级 panic 函数）在运行时 MUST panic，并标明宏名与不可直接调用。
-
-#### Scenario: 直接调用语法桩
-
-- **WHEN** 运行时代码直接调用 provider 包级语法桩（非经 expand 写回）
-- **THEN** MUST panic 并提示不可直接调用
-
 ### Requirement: expandtool 展开入口
 
 `macro/expandtool` MUST 提供：
@@ -128,3 +105,10 @@ MUST NOT 仅保留无区分的 `Register(importPath, Expander)` 作为唯一入�
 - **WHEN** expand_runner 已 `RegisterCall` / `RegisterDecl` 且执行 expand
 - **THEN** MUST 展开已 import 且已 link 的 Call 与 Decl 宏
 
+## REMOVED Requirements
+
+### Requirement: AST 节点抽象
+
+**Reason**: 从未实现独立节点包装层；Call/Decl Expander 直接使用 `go/ast`。
+
+**Migration**: 无；文档移除对该能力的提及。

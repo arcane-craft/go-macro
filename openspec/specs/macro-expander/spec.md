@@ -37,120 +37,77 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 ### Requirement: 通用展开器分发
 
-对每个识别到的调用点，引擎 MUST 构造 `macro.Context` 并调用 `Expander(ctx, call *ast.CallExpr) (macro.ExpandResult, error)`。
+对每个识别到的 **Call** 调用点，引擎 MUST 构造 `macro.CallContext` 并调用 **`CallExpander(ctx, call *ast.CallExpr) (macro.CallExpandResult, error)`**。
 
-#### Scenario: 按 syntax-id 分发
+对每个识别到的 **Decl** 嵌入站点，引擎 MUST 构造 `macro.DeclContext` 并调用 **`DeclExpander(ctx, site DeclSite) (macro.DeclExpandResult, error)`**。
+
+#### Scenario: 按 syntax-id 分发 Call
 
 - **WHEN** 识别到 `Inline(...)` 且注册表映射到 `syntax-inline`
-- **THEN** 引擎 MUST 调用对应 `InlineExpand`，且 MUST NOT 调用 `TryExpand`
+- **THEN** 引擎 MUST 调用对应 `CallExpander`，且 MUST NOT 调用 `TryExpand`
+
+#### Scenario: 按 syntax-id 分发 Decl
+
+- **WHEN** 识别到嵌入 `DeriveStringer` 且注册表映射到 `derive-stringer`
+- **THEN** 引擎 MUST 调用对应 `DeclExpander`
 
 ### Requirement: ExpandResult 贴回（splice）
 
-引擎 MUST 按 `ExpandResult.Target` 与对应载荷贴回 AST。引擎 MUST 在贴回前调用 `macro.ValidateExpandResult`（或等价校验）。引擎 MUST NOT 依据 `ctx.Site()` 选择贴回字段；`Site()` 仅用于 provider 语义与错误提示。
-
-| `Target` | 行为 |
-|----------|------|
-| `SpliceReplaceAssignStmt` | 替换整条 `AssignStmt` 为 `Stmts` |
-| `SpliceReplaceAssignRHS` | 在 enclosing `AssignStmt.Rhs` 中定位宏 `CallExpr` 所在槽位，仅用 `Expr` 替换该槽位；`Lhs` MUST 不变 |
-| `SpliceReplaceReturnStmt` | 替换整条 `ReturnStmt` 为 `Stmts` |
-| `SpliceReplaceReturnResults` | 仅将 `ReturnStmt.Results` 设为 `Exprs` |
-| `SpliceReplaceExprStmt` | 替换整条 `ExprStmt` 为 `Stmts` |
-| `SpliceReplaceCallExpr` | 在表达式槽中用 `Expr` 替换宏 `CallExpr`（含 `BinaryExpr`、`CallExpr` 参数、`CompositeLit` 等父节点） |
-
-若 `Target` 不在当前调用处的结构合法集合内，或载荷与 `Target` 不匹配，MUST 报错。错误信息 MUST 含文件名与行号，并 SHOULD 列出 `LegalSpliceTargets()` 允许的目标名称。引擎 MUST NOT 对任何 `syntax-id` 硬编码 splice 分支。
+引擎 MUST 按 **`CallExpandResult.Target`** 与载荷贴回 Call 宏 AST。引擎 MUST 在贴回前调用 **`macro.ValidateCallExpandResult`**。规则表（六种 `SpliceReplace*`）不变。
 
 #### Scenario: assign 仅换 RHS
 
-- **WHEN** 某 `Expander` 对 `x := Macro()` 返回 `Target: SpliceReplaceAssignRHS` 与 `Expr: e`
-- **THEN** 引擎 MUST 保留 `x` 在 `Lhs` 中，且 `Rhs` 中含宏的项 MUST 变为 `e`
-
-#### Scenario: return 语境替换整条 return
-
-- **WHEN** 某 `Expander`（如 contrib 仓 `TryExpand`）对 `return Macro(...)` 返回 `Target: SpliceReplaceReturnStmt` 与非空 `Stmts`
-- **THEN** 引擎 MUST 用 `Stmts` 替换整条 `return` 语句
-
-#### Scenario: return 语境仅换 Results
-
-- **WHEN** 某 `Expander` 对 `return Macro(...)` 返回 `Target: SpliceReplaceReturnResults` 与非空 `Exprs`
-- **THEN** 引擎 MUST 仅替换 `ReturnStmt.Results`，且 MUST NOT 替换整条 `ReturnStmt` 为语句块
-
-#### Scenario: 表达式宏替换 CallExpr
-
-- **WHEN** 某 `Expander` 对表达式槽宏返回 `Target: SpliceReplaceCallExpr` 与 `Expr: x`
-- **THEN** 引擎 MUST 仅用 `x` 替换原宏 `CallExpr`
-
-#### Scenario: Target 与锚点不一致
-
-- **WHEN** 宏位于 `return Macro()` 但 `Expander` 返回 `Target: SpliceReplaceCallExpr`
-- **THEN** expand MUST 失败，且 MUST NOT 写回部分展开结果
-
-#### Scenario: 载荷与 Target 不匹配
-
-- **WHEN** `Expander` 返回 `Target: SpliceReplaceAssignRHS` 且 `Expr` 为 nil
-- **THEN** expand MUST 失败
+- **WHEN** 某 `CallExpander` 对 `x := Macro()` 返回 `Target: SpliceReplaceAssignRHS` 与 `Expr: e`
+- **THEN** 引擎 MUST 保留 `x` 在 `Lhs` 中
 
 ### Requirement: ApplyExpandResult 不依赖 CallSiteKind
 
-`ApplyExpandResult`（或等价 splice 入口）MUST 仅接受 `file`、`call`、`ExpandResult`；MUST NOT 将 `CallSiteKind` 作为贴回分支条件。
+`ApplyExpandResult` MUST 仅接受 `file`、`call`、**`CallExpandResult`**；MUST NOT 将 `CallSiteKind` 作为贴回分支条件。
 
 #### Scenario: Site 与 Target 解耦
 
-- **WHEN** `ctx.Site()` 为 `SiteAssign` 但 `ExpandResult.Target` 为 `SpliceReplaceCallExpr` 且宏在 assign RHS
-- **THEN** splice MUST 失败（即使 `Site` 为 assign 语境）
+- **WHEN** `ctx.Site()` 为 `SiteAssign` 但 `CallExpandResult.Target` 为 `SpliceReplaceCallExpr` 且宏在 assign RHS
+- **THEN** splice MUST 失败
 
 ### Requirement: 展开错误报告
 
-当 `Expander` 返回错误或识别失败时，引擎 MUST 报告文件名、行号、原因，且 MUST NOT 静默跳过。
+当 **`CallExpander` 或 `DeclExpander`** 返回错误或识别失败时，引擎 MUST 报告文件名、行号、原因，且 MUST NOT 静默跳过或写回部分结果。
 
-#### Scenario: Expander 返回错误
+#### Scenario: DeclExpander 返回错误
 
-- **WHEN** `TryExpand` 对非法 Site 返回 `error`
-- **THEN** 引擎 MUST 输出含文件路径与行号的错误信息，且 MUST NOT 写回部分展开结果
+- **WHEN** `DeriveStringerExpand` 返回 error
+- **THEN** MUST 含文件路径与行号，且 MUST NOT 写 gen
 
 ### Requirement: 展开器函数签名约定
 
-每个 `Expander` MUST 为 `func(Context, *ast.CallExpr) (ExpandResult, error)`，且 MUST 在其 doc 中含 `//macro: <syntax-id>`。注册表 MUST 将该函数绑定为对应 syntax-id 的展开器（并与同 syntax-id 的桩关联）。
+每个 **Call** Expander MUST 为 **`func(CallContext, *ast.CallExpr) (CallExpandResult, error)`**，doc 含 `//macro: <syntax-id>`。
 
-#### Scenario: 注册表绑定 Expander 签名
+每个 **Decl** Expander MUST 为 **`func(DeclContext, DeclSite) (DeclExpandResult, error)`**，doc 含 `//macro: <syntax-id>`（通常与 marker 类型同 syntax-id）。
 
-- **WHEN** provider 包中 `InlineExpand` 的 doc 含 `//macro: syntax-inline` 且签名符合 `Expander`
-- **THEN** 注册表 MUST 将 `syntax-inline` 的展开实现绑定到 `linked` 提供的 `InlineExpand`
+#### Scenario: 注册表绑定 CallExpander
+
+- **WHEN** provider 中 `InlineExpand` doc 含 `//macro: syntax-inline` 且签名符合 `CallExpander`
+- **THEN** 注册表 MUST 将 `syntax-inline` 绑定到该函数
 
 ### Requirement: Provider 激活与 Expander 链接
 
-`ExpandPackages(patterns, linked map[string]macro.Expander)` MUST 对每个待展开包：
+`ExpandPackages` MUST：
 
-1. 收集宏主文件所在包的 **import 路径集合**；
-2. 取 **`linked` 的 key 与 import 集合的交集** 为候选宏库路径；
-3. 对每个候选路径：解析 provider AST，从**各函数 doc** 读取 `//macro:`，登记桩与 syntax-id，并绑定 `linked[path]` 的 `Expander`。
+1. 发现宏主文件 import 的 provider；
+2. 解析各 syntax-id 的 Call 桩、Decl marker、CallExpander、DeclExpander；
+3. 仅激活 **已 import 且已 link** 的 syntax-id；
+4. 对每文件 **先 `ExpandDeclMacros` 再 `ExpandCallMacros`**。
 
-引擎 MUST NOT 维护官方宏库目录，MUST NOT 在识别或 splice 逻辑中对任何 `syntax-id` 硬编码分支。
+link 生成 MUST 支持分别注册 Call 与 Decl Expander（按 syntax-id）。
 
-`go-macro` 根 module 的 `internal/expander` 包及其测试 MUST NOT import `go-macro-contrib`。对外展开入口为 `macro/expandtool` 与 `cmd/macro expand`。
+#### Scenario: 先 Decl 后 Call
 
-#### Scenario: 未 import 的宏库不 link
-
-- **WHEN** `linked` 含 `github.com/arcane-craft/go-macro-contrib/try`，但宏主文件未 import 该 path
-- **THEN** 该包展开时 MUST NOT 注册 `syntax-try`
-
-#### Scenario: 已 import 但未 link 则展开失败
-
-- **WHEN** 宏主文件 import `github.com/arcane-craft/go-macro-contrib/try` 并调用 `Try(...)`，但 expand 工具传入的 `linked` 为空或不包含该 path
-- **THEN** 展开 MUST 失败（未知 stub 或未注册），且 MUST NOT 静默跳过
-
-#### Scenario: 仅 link 已 import 的子集
-
-- **WHEN** 宏主文件 import `github.com/arcane-craft/go-macro-contrib/inline` 与 `.../try`，但 `linked` 仅含 `.../inline`
-- **THEN** 该包 MUST 仅注册 `syntax-inline`；对 `Try(...)` 调用 MUST 展开失败
-
-#### Scenario: 识别使用 importPath 与桩名
-
-- **WHEN** 两个 provider 均含名为 `Macro` 的桩且各自 doc 含 `//macro:`，宏主文件分别通过不同 import path 调用
-- **THEN** 引擎 MUST 按各自 import path 分发到对应 Expander，且 MUST NOT 因桩名相同而错绑
+- **WHEN** 同一宏主文件含 struct marker 与 `Try(...)`
+- **THEN** MUST 在 Call splice 之前完成 Decl 展开
 
 ### Requirement: Provider 语义以外置规范为准
 
-`TryExpand`、`InlineExpand` 的载荷校验、Site 禁止规则、展开语句形态等 provider 级语义 MUST 以 `go-macro-contrib` 仓库内 `syntax-try`、`syntax-inline` OpenSpec 为准。本规范仅定义展开引擎的识别、分发、`ExpandResult` 贴回与 link/import 边界。
+`TryExpand`、`InlineExpand` 的载荷校验、Site 禁止规则、展开语句形态等 provider 级语义 MUST 以 `go-macro-contrib` 仓库内 `syntax-try`、`syntax-inline` OpenSpec 为准。本规范仅定义展开引擎的识别、分发、Call/Decl 贴回与 link/import 边界。
 
 #### Scenario: 修改 Try 展开语义
 
@@ -222,4 +179,55 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 - **WHEN** 值用法校验在宏主文件任一处失败
 - **THEN** expand MUST 失败，且 MUST NOT 写回 `*_macro_gen.go` 或部分展开结果
+
+### Requirement: Decl 宏识别
+
+引擎 MUST 在宏主文件（`macro` build tag）上扫描 struct 的 **匿名嵌入**字段。对解析为已注册 marker 的嵌入，MUST 构造 `DeclSite`（含 `Target`、`EmbedIndex`、`MarkerTypeArgs`、`MacroTag`）。
+
+MUST NOT 将 `*_macro_gen.go` 作为 Decl 扫描输入。
+
+#### Scenario: 泛型 marker 实例
+
+- **WHEN** 嵌入 `WireExtra[MyType]` 且 `WireExtra` 为已注册泛型 marker
+- **THEN** `DeclSite.MarkerTypeArgs` MUST 含 `MyType`
+
+### Requirement: DeclExpandResult 贴回
+
+引擎 MUST 校验 **`DeclExpandResult`**：`Fields` 与 `Methods` 均非 nil；`Methods` receiver 均为 Target。
+
+贴回 MUST：
+
+1. 将 `Target` 的 `StructType.Fields.List` 替换为 `result.Fields`；
+2. 从 `file.Decls` 移除 receiver 为 Target 的既有 `*ast.FuncDecl`；
+3. 在 `Target` 的 `TypeSpec` 之后插入 `result.Methods`。
+
+MUST NOT 写入包级 `const`/`var` 或其它类型。
+
+#### Scenario: 全量 Methods 替换
+
+- **WHEN** `DeclExpander` 返回的 `Methods` 漏掉 Target 原有方法 `Validate`
+- **THEN** 贴回后文件 MUST NOT 再含 `Validate`（作者责任；引擎不自动合并）
+
+#### Scenario: 校验零值 result
+
+- **WHEN** `DeclExpander` 返回零值 `DeclExpandResult` 与 nil error
+- **THEN** expand MUST 失败
+
+### Requirement: 多 Marker 顺序
+
+对同一 Target 多个嵌入站点，MUST 按字段声明顺序依次调用 `DeclExpander` 并贴回。每次贴回后 MAY 重新扫描剩余站点以稳定索引。
+
+#### Scenario: 双 marker 顺序
+
+- **WHEN** `type T struct { WireJSON; DeriveStringer; X int }`
+- **THEN** MUST 先处理 `WireJSON` 再处理 `DeriveStringer`
+
+### Requirement: 扫描范围扩展
+
+引擎扫描范围 MUST 包含：Call 宏调用、语法桩值用法校验、**Decl 嵌入 marker**。三者均在宏主文件上进行。
+
+#### Scenario: gen 不参与 Decl 扫描
+
+- **WHEN** 存在 `foo.go`（macro）与 `foo_macro_gen.go`（!macro）
+- **THEN** Decl 扫描 MUST 仅针对 `foo.go`
 

@@ -26,8 +26,8 @@ import (
 func MacroStub(int) int { panic("x") }
 
 //macro: syntax-test
-func MacroExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error) {
-	return macro.ExpandResult{}, nil
+func MacroExpand(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandResult, error) {
+	return macro.CallExpandResult{}, nil
 }
 `
 	fset := token.NewFileSet()
@@ -36,8 +36,8 @@ func MacroExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, err
 		t.Fatal(err)
 	}
 	reg := macro.NewRegistry()
-	if err := reg.RegisterProvider(providerPath, []*ast.File{pf}, func(macro.Context, *ast.CallExpr) (macro.ExpandResult, error) {
-		return macro.ExpandResult{}, nil
+	if err := reg.RegisterProvider(providerPath, []*ast.File{pf}, func(macro.CallContext, *ast.CallExpr) (macro.CallExpandResult, error) {
+		return macro.CallExpandResult{}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -158,8 +158,8 @@ import ("go/ast"; "github.com/arcane-craft/go-macro/macro")
 //macro: syntax-test
 func MacroStub(int) int { panic("x") }
 //macro: syntax-test
-func MacroExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error) {
-	return macro.ExpandResult{}, nil
+func MacroExpand(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandResult, error) {
+	return macro.CallExpandResult{}, nil
 }
 `, parser.ParseComments)
 	if err != nil {

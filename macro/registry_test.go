@@ -24,8 +24,8 @@ import (
 )
 
 //macro: syntax-test
-func TestExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error) {
-	return macro.ExpandResult{}, nil
+func TestExpand(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandResult, error) {
+	return macro.CallExpandResult{}, nil
 }
 `),
 	}
@@ -34,8 +34,8 @@ func TestExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, erro
 		t.Fatal(err)
 	}
 	r := macro.NewRegistry()
-	expand := func(macro.Context, *ast.CallExpr) (macro.ExpandResult, error) {
-		return macro.ExpandResult{}, nil
+	expand := func(macro.CallContext, *ast.CallExpr) (macro.CallExpandResult, error) {
+		return macro.CallExpandResult{}, nil
 	}
 	if err := r.RegisterProvider("example.com/p", files, expand); err != nil {
 		t.Fatal(err)
@@ -50,7 +50,7 @@ func TestExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, erro
 }
 
 func TestContextRequiresEnclosingFunc(t *testing.T) {
-	_, err := macro.NewContext(token.NewFileSet(), nil, nil, nil, nil, "X", "syntax-x", macro.SiteExpr, nil)
+	_, err := macro.NewCallContext(token.NewFileSet(), nil, nil, nil, nil, "X", "syntax-x", macro.SiteExpr, nil)
 	if err == nil {
 		t.Fatal("expected error without enclosing func")
 	}
@@ -66,22 +66,26 @@ func Stub() { panic("x") }
 		"expand.go": []byte(`package p
 import ("go/ast"; "github.com/arcane-craft/go-macro/macro")
 //macro: syntax-x
-func XExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error) {
-	return macro.ExpandResult{}, nil
+func XExpand(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandResult, error) {
+	return macro.CallExpandResult{}, nil
 }
 `),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	info, err := macro.ScanProviderFiles(files)
+	scan, err := macro.ScanProviderFiles(files)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.SyntaxID != "syntax-x" || info.ExpanderName != "XExpand" {
-		t.Fatalf("info: %+v", info)
+	if len(scan.Entries) != 1 {
+		t.Fatalf("entries: %+v", scan.Entries)
 	}
-	if len(info.StubNames) != 1 || info.StubNames[0] != "Stub" {
-		t.Fatalf("stubs: %v", info.StubNames)
+	e := scan.Entries[0]
+	if e.SyntaxID != "syntax-x" || e.CallExpander != "XExpand" {
+		t.Fatalf("entry: %+v", e)
+	}
+	if len(e.StubNames) != 1 || e.StubNames[0] != "Stub" {
+		t.Fatalf("stubs: %v", e.StubNames)
 	}
 }

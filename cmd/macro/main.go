@@ -97,14 +97,14 @@ import (
 //macro: %s
 
 // MacroExpand expands Macro calls (placeholder: returns argument).
-func MacroExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error) {
+func MacroExpand(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandResult, error) {
 	if ctx.Site() != macro.SiteExpr {
-		return macro.ExpandResult{}, macro.ErrorAt(ctx.FileSet(), ctx.MacroPos(), "Macro only allowed in expression position")
+		return macro.CallExpandResult{}, macro.ErrorAt(ctx.FileSet(), ctx.MacroPos(), "Macro only allowed in expression position")
 	}
 	if len(call.Args) != 1 {
-		return macro.ExpandResult{}, macro.ErrorAt(ctx.FileSet(), ctx.MacroPos(), "Macro expects one argument")
+		return macro.CallExpandResult{}, macro.ErrorAt(ctx.FileSet(), ctx.MacroPos(), "Macro expects one argument")
 	}
-	return macro.ExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: call.Args[0]}, nil
+	return macro.CallExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: call.Args[0]}, nil
 }
 `, name, syntaxID),
 		"expand_test.go": fmt.Sprintf(`package %s_test
@@ -117,7 +117,7 @@ import (
 )
 
 func TestMacroExpand(t *testing.T) {
-	_, err := mactest.Expand(%s.MacroExpand, "Macro", "%s", `+"`"+`
+	_, err := mactest.ExpandCall(%s.MacroExpand, "Macro", "%s", `+"`"+`
 func f() int { return Macro(42) }
 `+"`"+`)
 	if err != nil {

@@ -54,20 +54,20 @@ func LegalSpliceTargetsForCall(file *ast.File, call *ast.CallExpr) []SpliceTarge
 	return []SpliceTarget{SpliceReplaceCallExpr}
 }
 
-// ValidateExpandResult checks Target, payload shape, and structural legality.
-func ValidateExpandResult(ctx Context, result ExpandResult) error {
+// ValidateCallExpandResult checks Target, payload shape, and structural legality.
+func ValidateCallExpandResult(ctx CallContext, result CallExpandResult) error {
 	if ctx == nil {
-		return fmt.Errorf("macro: nil Context")
+		return fmt.Errorf("macro: nil CallContext")
 	}
-	return ValidateExpandResultForCall(ctx.File(), ctx.Call(), result)
+	return ValidateCallExpandResultForCall(ctx.File(), ctx.Call(), result)
 }
 
-// ValidateExpandResultForCall validates without a full Context (used by the engine).
-func ValidateExpandResultForCall(file *ast.File, call *ast.CallExpr, result ExpandResult) error {
-	return validateExpandResult(file, call, result)
+// ValidateCallExpandResultForCall validates without a full CallContext (used by the engine).
+func ValidateCallExpandResultForCall(file *ast.File, call *ast.CallExpr, result CallExpandResult) error {
+	return validateCallExpandResult(file, call, result)
 }
 
-func validateExpandResult(file *ast.File, call *ast.CallExpr, result ExpandResult) error {
+func validateCallExpandResult(file *ast.File, call *ast.CallExpr, result CallExpandResult) error {
 	if err := validatePayload(result); err != nil {
 		return err
 	}
@@ -79,9 +79,9 @@ func validateExpandResult(file *ast.File, call *ast.CallExpr, result ExpandResul
 	return nil
 }
 
-func validatePayload(result ExpandResult) error {
+func validatePayload(result CallExpandResult) error {
 	if result.Target == spliceTargetInvalid {
-		return fmt.Errorf("macro: ExpandResult.Target is required")
+		return fmt.Errorf("macro: CallExpandResult.Target is required")
 	}
 	switch result.Target {
 	case SpliceReplaceAssignStmt, SpliceReplaceReturnStmt, SpliceReplaceExprStmt:
@@ -106,7 +106,7 @@ func validatePayload(result ExpandResult) error {
 			return fmt.Errorf("macro: %s must not set Stmts or Expr", result.Target)
 		}
 	default:
-		return fmt.Errorf("macro: unknown ExpandResult.Target %v", result.Target)
+		return fmt.Errorf("macro: unknown CallExpandResult.Target %v", result.Target)
 	}
 	return nil
 }

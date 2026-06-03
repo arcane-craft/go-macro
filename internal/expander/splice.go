@@ -8,8 +8,8 @@ import (
 )
 
 // ApplyExpandResult splices expand result into the file AST.
-func ApplyExpandResult(file *ast.File, call *ast.CallExpr, result macro.ExpandResult) error {
-	if err := macro.ValidateExpandResultForCall(file, call, result); err != nil {
+func ApplyExpandResult(file *ast.File, call *ast.CallExpr, result macro.CallExpandResult) error {
+	if err := macro.ValidateCallExpandResultForCall(file, call, result); err != nil {
 		return err
 	}
 	switch result.Target {

@@ -1,10 +1,10 @@
 // Package mactest helps provider authors test Expander functions without full macro expand.
 //
-// After Expand, call Validate to check Target and payload against the call site:
+// After ExpandCall, call ValidateCall to check Target and payload against the call site:
 //
-//	result, err := mactest.Expand(exp, "Stub", "syntax-id", snippet)
+//	result, err := mactest.ExpandCall(exp, "Stub", "syntax-id", snippet)
 //	if err != nil { ... }
-//	if err := mactest.Validate(ctx, result); err != nil { ... }
+//	if err := mactest.ValidateCall(ctx, result); err != nil { ... }
 package mactest
 
 import (
@@ -18,20 +18,20 @@ import (
 	"github.com/arcane-craft/go-macro/macro"
 )
 
-// Validate checks ExpandResult Target and payload for the call site in ctx.
-func Validate(ctx macro.Context, result macro.ExpandResult) error {
-	return macro.ValidateExpandResult(ctx, result)
+// ValidateCall checks CallExpandResult Target and payload for the call site in ctx.
+func ValidateCall(ctx macro.CallContext, result macro.CallExpandResult) error {
+	return macro.ValidateCallExpandResult(ctx, result)
 }
 
-// Expand parses snippet as a package body, finds the first macro CallExpr named stubName,
+// ExpandCall parses snippet as a package body, finds the first macro CallExpr named stubName,
 // type-checks, and invokes expand.
-func Expand(expand macro.Expander, stubName, syntaxID string, snippet string) (macro.ExpandResult, error) {
+func ExpandCall(expand macro.CallExpander, stubName, syntaxID string, snippet string) (macro.CallExpandResult, error) {
 	fset := token.NewFileSet()
 	const filename = "snippet.go"
 	src := "package mactest\n\n" + snippet
 	f, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
 	if err != nil {
-		return macro.ExpandResult{}, err
+		return macro.CallExpandResult{}, err
 	}
 
 	var call *ast.CallExpr
@@ -63,10 +63,10 @@ func Expand(expand macro.Expander, stubName, syntaxID string, snippet string) (m
 		})
 	}
 	if call == nil {
-		return macro.ExpandResult{}, fmt.Errorf("mactest: no call to %s in snippet", stubName)
+		return macro.CallExpandResult{}, fmt.Errorf("mactest: no call to %s in snippet", stubName)
 	}
 	if enclosing == nil {
-		return macro.ExpandResult{}, fmt.Errorf("mactest: snippet must contain a function")
+		return macro.CallExpandResult{}, fmt.Errorf("mactest: snippet must contain a function")
 	}
 
 	cfg := &types.Config{Importer: importer.Default()}
@@ -79,13 +79,13 @@ func Expand(expand macro.Expander, stubName, syntaxID string, snippet string) (m
 	}
 	pkg, err := cfg.Check("mactest", fset, []*ast.File{f}, info)
 	if err != nil {
-		return macro.ExpandResult{}, fmt.Errorf("mactest: typecheck: %w", err)
+		return macro.CallExpandResult{}, fmt.Errorf("mactest: typecheck: %w", err)
 	}
 
 	site := classifySite(f, call)
-	ctx, err := macro.NewContext(fset, f, info, pkg, call, stubName, syntaxID, site, enclosing)
+	ctx, err := macro.NewCallContext(fset, f, info, pkg, call, stubName, syntaxID, site, enclosing)
 	if err != nil {
-		return macro.ExpandResult{}, err
+		return macro.CallExpandResult{}, err
 	}
 	return expand(ctx, call)
 }

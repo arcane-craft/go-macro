@@ -10,131 +10,201 @@ import (
 
 const macroCommentPrefix = "macro:"
 
-// Registry maps provider import paths to stubs and expanders.
+// Registry maps provider import paths to stubs, markers, and expanders.
 type Registry struct {
-	stubSyntax     map[string]map[string]string // importPath -> stubName -> syntaxID
-	syntaxToExpand map[string]Expander
-	importExpand   map[string]Expander // importPath -> expander
-	providerStubs  map[string]map[string]struct{}
+	stubSyntax      map[string]map[string]string // importPath -> stubName -> syntaxID
+	markerSyntax    map[string]map[string]string // importPath -> markerBaseName -> syntaxID
+	syntaxToCall    map[string]CallExpander
+	syntaxToDecl    map[string]DeclExpander
+	importCall      map[string]CallExpander
+	providerStubs   map[string]map[string]struct{}
+	providerMarkers map[string]map[string]struct{}
 }
 
 // NewRegistry returns an empty registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		stubSyntax:     make(map[string]map[string]string),
-		syntaxToExpand: make(map[string]Expander),
-		importExpand:   make(map[string]Expander),
-		providerStubs:  make(map[string]map[string]struct{}),
+		stubSyntax:      make(map[string]map[string]string),
+		markerSyntax:    make(map[string]map[string]string),
+		syntaxToCall:    make(map[string]CallExpander),
+		syntaxToDecl:    make(map[string]DeclExpander),
+		importCall:      make(map[string]CallExpander),
+		providerStubs:   make(map[string]map[string]struct{}),
+		providerMarkers: make(map[string]map[string]struct{}),
 	}
 }
 
-// ProviderInfo describes a macro provider package discovered from source.
+// ProviderInfo describes one syntax-id entry in a provider package.
 type ProviderInfo struct {
-	SyntaxID     string
-	ExpanderName string
-	StubNames    []string
+	SyntaxID       string
+	CallExpander   string
+	DeclExpander   string
+	StubNames      []string
+	MarkerTypeNames []string
 }
 
-// ScanProviderFiles parses provider sources for per-function //macro: directives.
-func ScanProviderFiles(files []*ast.File) (ProviderInfo, error) {
-	var info ProviderInfo
-	expanders := make(map[string]string) // syntaxID -> func name
+// ProviderScan aggregates all syntax-ids discovered in provider sources.
+type ProviderScan struct {
+	Entries []ProviderInfo
+}
+
+// ScanProviderFiles parses provider sources for //macro: on stubs, markers, and expanders.
+func ScanProviderFiles(files []*ast.File) (ProviderScan, error) {
+	type entry struct {
+		stubs        []string
+		markers      []string
+		callExpander string
+		declExpander string
+	}
+	bySyntax := make(map[string]*entry)
 
 	for _, f := range files {
 		for _, decl := range f.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Recv != nil || fn.Name == nil {
-				continue
-			}
-			sid, ok := funcMacroSyntaxID(fn)
-			if !ok {
-				continue
-			}
-			if isExpanderDecl(fn) {
-				if prev, exists := expanders[sid]; exists && prev != fn.Name.Name {
-					return ProviderInfo{}, fmt.Errorf("macro: multiple expanders for syntax-id %q", sid)
+			switch d := decl.(type) {
+			case *ast.FuncDecl:
+				if d.Recv != nil || d.Name == nil {
+					continue
 				}
-				expanders[sid] = fn.Name.Name
-				continue
+				sid, ok := funcMacroSyntaxID(d)
+				if !ok {
+					continue
+				}
+				e := bySyntax[sid]
+				if e == nil {
+					e = &entry{}
+					bySyntax[sid] = e
+				}
+				if isCallExpanderDecl(d) {
+					if e.callExpander != "" && e.callExpander != d.Name.Name {
+						return ProviderScan{}, fmt.Errorf("macro: multiple call expanders for syntax-id %q", sid)
+					}
+					e.callExpander = d.Name.Name
+					continue
+				}
+				if isDeclExpanderDecl(d) {
+					if e.declExpander != "" && e.declExpander != d.Name.Name {
+						return ProviderScan{}, fmt.Errorf("macro: multiple decl expanders for syntax-id %q", sid)
+					}
+					e.declExpander = d.Name.Name
+					continue
+				}
+				e.stubs = append(e.stubs, d.Name.Name)
+			case *ast.GenDecl:
+				if d.Tok != token.TYPE {
+					continue
+				}
+				for _, spec := range d.Specs {
+					ts, ok := spec.(*ast.TypeSpec)
+					if !ok || ts.Name == nil {
+						continue
+					}
+					sid, ok := typeMacroSyntaxID(ts)
+					if !ok {
+						continue
+					}
+					e := bySyntax[sid]
+					if e == nil {
+						e = &entry{}
+						bySyntax[sid] = e
+					}
+					e.markers = append(e.markers, ts.Name.Name)
+				}
 			}
-			if info.SyntaxID == "" {
-				info.SyntaxID = sid
-			} else if sid != info.SyntaxID {
-				return ProviderInfo{}, fmt.Errorf("macro: stub %q syntax-id %q != %q",
-					fn.Name.Name, sid, info.SyntaxID)
-			}
-			info.StubNames = append(info.StubNames, fn.Name.Name)
 		}
 	}
 
-	if len(expanders) == 0 {
-		return ProviderInfo{}, fmt.Errorf("macro: provider missing Expander with //macro: directive")
+	if len(bySyntax) == 0 {
+		return ProviderScan{}, fmt.Errorf("macro: provider has no //macro: directives")
 	}
-	if len(expanders) > 1 {
-		return ProviderInfo{}, fmt.Errorf("macro: provider has multiple syntax-id expanders (%d)", len(expanders))
-	}
-	for sid, name := range expanders {
-		if info.SyntaxID != "" && sid != info.SyntaxID {
-			return ProviderInfo{}, fmt.Errorf("macro: expander syntax-id %q != stub syntax-id %q", sid, info.SyntaxID)
+
+	var scan ProviderScan
+	for sid, e := range bySyntax {
+		if len(e.stubs) == 0 && len(e.markers) == 0 {
+			return ProviderScan{}, fmt.Errorf("macro: syntax-id %q has no stubs or markers", sid)
 		}
-		info.SyntaxID = sid
-		info.ExpanderName = name
+		scan.Entries = append(scan.Entries, ProviderInfo{
+			SyntaxID:        sid,
+			CallExpander:    e.callExpander,
+			DeclExpander:    e.declExpander,
+			StubNames:       e.stubs,
+			MarkerTypeNames: e.markers,
+		})
 	}
-	if len(info.StubNames) == 0 {
-		return ProviderInfo{}, fmt.Errorf("macro: provider has no stub functions with //macro: directive")
-	}
-	return info, nil
+	return scan, nil
 }
 
-// ProviderSyntaxID returns the syntax-id from the sole Expander's //macro: directive.
+// ProviderSyntaxID returns the first syntax-id with a call expander (legacy helper).
 func ProviderSyntaxID(files []*ast.File) (string, error) {
-	info, err := ScanProviderFiles(files)
+	scan, err := ScanProviderFiles(files)
 	if err != nil {
 		return "", err
 	}
-	return info.SyntaxID, nil
+	for _, e := range scan.Entries {
+		if e.CallExpander != "" {
+			return e.SyntaxID, nil
+		}
+	}
+	if len(scan.Entries) > 0 {
+		return scan.Entries[0].SyntaxID, nil
+	}
+	return "", fmt.Errorf("macro: no syntax-id found")
 }
 
-// RegisterProvider registers stubs and binds the linked expander for importPath.
-func (r *Registry) RegisterProvider(importPath string, files []*ast.File, expand Expander) error {
-	if expand == nil {
-		return fmt.Errorf("macro: expander for %q is nil", importPath)
-	}
-	info, err := ScanProviderFiles(files)
+// RegisterProviderSources registers stubs and markers from provider files.
+func (r *Registry) RegisterProviderSources(importPath string, files []*ast.File) error {
+	scan, err := ScanProviderFiles(files)
 	if err != nil {
 		return fmt.Errorf("macro: provider %s: %w", importPath, err)
 	}
-
 	stubs := make(map[string]struct{})
-	stubSyntax := make(map[string]string)
-	for _, f := range files {
-		for _, decl := range f.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Recv != nil || fn.Name == nil || isExpanderDecl(fn) {
-				continue
-			}
-			sid, ok := funcMacroSyntaxID(fn)
-			if !ok {
-				continue
-			}
-			if sid != info.SyntaxID {
-				return fmt.Errorf("macro: conflicting syntax-id in provider %s", importPath)
-			}
-			stubs[fn.Name.Name] = struct{}{}
-			stubSyntax[fn.Name.Name] = sid
-		}
-	}
-
-	r.importExpand[importPath] = expand
-	r.syntaxToExpand[info.SyntaxID] = expand
-	r.providerStubs[importPath] = stubs
+	markers := make(map[string]struct{})
 	if r.stubSyntax[importPath] == nil {
 		r.stubSyntax[importPath] = make(map[string]string)
 	}
-	for k, v := range stubSyntax {
-		r.stubSyntax[importPath][k] = v
+	if r.markerSyntax[importPath] == nil {
+		r.markerSyntax[importPath] = make(map[string]string)
+	}
+	for _, e := range scan.Entries {
+		for _, name := range e.StubNames {
+			stubs[name] = struct{}{}
+			r.stubSyntax[importPath][name] = e.SyntaxID
+		}
+		for _, name := range e.MarkerTypeNames {
+			markers[name] = struct{}{}
+			r.markerSyntax[importPath][name] = e.SyntaxID
+		}
+	}
+	r.providerStubs[importPath] = stubs
+	r.providerMarkers[importPath] = markers
+	return nil
+}
+
+// RegisterProvider registers stubs and binds the linked call expander for importPath (legacy).
+func (r *Registry) RegisterProvider(importPath string, files []*ast.File, expand CallExpander) error {
+	if expand == nil {
+		return fmt.Errorf("macro: expander for %q is nil", importPath)
+	}
+	if err := r.RegisterProviderSources(importPath, files); err != nil {
+		return err
+	}
+	r.importCall[importPath] = expand
+	scan, _ := ScanProviderFiles(files)
+	for _, e := range scan.Entries {
+		if len(e.StubNames) > 0 {
+			r.syntaxToCall[e.SyntaxID] = expand
+		}
 	}
 	return nil
+}
+
+// RegisterCallSyntax binds a syntax-id to a call expander.
+func (r *Registry) RegisterCallSyntax(syntaxID string, expand CallExpander) {
+	r.syntaxToCall[syntaxID] = expand
+}
+
+// RegisterDeclSyntax binds a syntax-id to a decl expander.
+func (r *Registry) RegisterDeclSyntax(syntaxID string, expand DeclExpander) {
+	r.syntaxToDecl[syntaxID] = expand
 }
 
 // RegisterStub maps a stub name to a syntax ID for importPath (tests).
@@ -149,18 +219,30 @@ func (r *Registry) RegisterStub(importPath, stubName, syntaxID string) {
 	r.providerStubs[importPath][stubName] = struct{}{}
 }
 
-// RegisterSyntax binds a syntax ID to an expander (tests).
-func (r *Registry) RegisterSyntax(syntaxID string, expand Expander) {
-	r.syntaxToExpand[syntaxID] = expand
+// RegisterMarker maps a marker type name to syntax ID for importPath (tests).
+func (r *Registry) RegisterMarker(importPath, markerName, syntaxID string) {
+	if r.markerSyntax[importPath] == nil {
+		r.markerSyntax[importPath] = make(map[string]string)
+	}
+	r.markerSyntax[importPath][markerName] = syntaxID
+	if r.providerMarkers[importPath] == nil {
+		r.providerMarkers[importPath] = make(map[string]struct{})
+	}
+	r.providerMarkers[importPath][markerName] = struct{}{}
 }
 
-// RegisterImportExpander binds importPath to expander (tests).
-func (r *Registry) RegisterImportExpander(importPath string, expand Expander) {
-	r.importExpand[importPath] = expand
+// RegisterSyntax binds a syntax ID to a call expander (tests).
+func (r *Registry) RegisterSyntax(syntaxID string, expand CallExpander) {
+	r.syntaxToCall[syntaxID] = expand
+}
+
+// RegisterImportCallExpander binds importPath to expander (tests).
+func (r *Registry) RegisterImportCallExpander(importPath string, expand CallExpander) {
+	r.importCall[importPath] = expand
 }
 
 // Lookup returns syntax ID and expander for a stub in importPath.
-func (r *Registry) Lookup(importPath, stubName string) (syntaxID string, expand Expander, ok bool) {
+func (r *Registry) Lookup(importPath, stubName string) (syntaxID string, expand CallExpander, ok bool) {
 	stubs, ok := r.providerStubs[importPath]
 	if !ok {
 		return "", nil, false
@@ -172,10 +254,27 @@ func (r *Registry) Lookup(importPath, stubName string) (syntaxID string, expand 
 	if !ok {
 		return "", nil, false
 	}
-	expand, ok = r.importExpand[importPath]
+	expand, ok = r.importCall[importPath]
 	if !ok {
-		expand, ok = r.syntaxToExpand[syntaxID]
+		expand, ok = r.syntaxToCall[syntaxID]
 	}
+	return syntaxID, expand, ok
+}
+
+// LookupDeclMarker returns syntax ID and decl expander for a marker base name in importPath.
+func (r *Registry) LookupDeclMarker(importPath, markerBaseName string) (syntaxID string, expand DeclExpander, ok bool) {
+	markers, ok := r.providerMarkers[importPath]
+	if !ok {
+		return "", nil, false
+	}
+	if _, ok = markers[markerBaseName]; !ok {
+		return "", nil, false
+	}
+	syntaxID, ok = r.markerSyntax[importPath][markerBaseName]
+	if !ok {
+		return "", nil, false
+	}
+	expand, ok = r.syntaxToDecl[syntaxID]
 	return syntaxID, expand, ok
 }
 
@@ -189,9 +288,24 @@ func (r *Registry) HasStub(importPath, stubName string) bool {
 	return ok
 }
 
+// HasMarker reports whether markerBaseName is registered for importPath.
+func (r *Registry) HasMarker(importPath, markerBaseName string) bool {
+	markers, ok := r.providerMarkers[importPath]
+	if !ok {
+		return false
+	}
+	_, ok = markers[markerBaseName]
+	return ok
+}
+
 // ProviderStubs returns stub names for a provider import path.
 func (r *Registry) ProviderStubs(importPath string) map[string]struct{} {
 	return r.providerStubs[importPath]
+}
+
+// ProviderMarkers returns marker type base names for a provider import path.
+func (r *Registry) ProviderMarkers(importPath string) map[string]struct{} {
+	return r.providerMarkers[importPath]
 }
 
 // ParseProviderFiles parses Go source into AST files.
@@ -219,6 +333,18 @@ func funcMacroSyntaxID(fn *ast.FuncDecl) (string, bool) {
 	return "", false
 }
 
+func typeMacroSyntaxID(ts *ast.TypeSpec) (string, bool) {
+	if ts.Doc == nil {
+		return "", false
+	}
+	for _, c := range ts.Doc.List {
+		if sid, ok := parseMacroComment(c.Text); ok {
+			return sid, true
+		}
+	}
+	return "", false
+}
+
 func parseMacroComment(text string) (string, bool) {
 	text = strings.TrimSpace(strings.TrimPrefix(text, "//"))
 	if !strings.HasPrefix(text, macroCommentPrefix) {
@@ -232,13 +358,41 @@ func parseMacroComment(text string) (string, bool) {
 	return parts[0], true
 }
 
-// isExpanderDecl reports whether fn looks like func(Context, *ast.CallExpr) (ExpandResult, error).
-func isExpanderDecl(fn *ast.FuncDecl) bool {
+func isCallExpanderDecl(fn *ast.FuncDecl) bool {
 	if fn.Type.Params == nil || fn.Type.Results == nil {
 		return false
 	}
 	if len(fn.Type.Params.List) != 2 || len(fn.Type.Results.List) != 2 {
 		return false
 	}
-	return true
+	return expanderSecondParam(fn) == "CallExpr"
+}
+
+func isDeclExpanderDecl(fn *ast.FuncDecl) bool {
+	if fn.Type.Params == nil || fn.Type.Results == nil {
+		return false
+	}
+	if len(fn.Type.Params.List) != 2 || len(fn.Type.Results.List) != 2 {
+		return false
+	}
+	return expanderSecondParam(fn) == "DeclSite"
+}
+
+func expanderSecondParam(fn *ast.FuncDecl) string {
+	if len(fn.Type.Params.List) < 2 {
+		return ""
+	}
+	return typeExprBaseName(fn.Type.Params.List[1].Type)
+}
+
+func typeExprBaseName(t ast.Expr) string {
+	switch e := t.(type) {
+	case *ast.StarExpr:
+		return typeExprBaseName(e.X)
+	case *ast.Ident:
+		return e.Name
+	case *ast.SelectorExpr:
+		return e.Sel.Name
+	}
+	return ""
 }

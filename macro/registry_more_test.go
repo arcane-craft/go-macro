@@ -10,11 +10,11 @@ import (
 
 func TestRegistryRegisterStubAndSyntax(t *testing.T) {
 	r := macro.NewRegistry()
-	expand := func(macro.Context, *ast.CallExpr) (macro.ExpandResult, error) {
-		return macro.ExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: ast.NewIdent("1")}, nil
+	expand := func(macro.CallContext, *ast.CallExpr) (macro.CallExpandResult, error) {
+		return macro.CallExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: ast.NewIdent("1")}, nil
 	}
 	r.RegisterSyntax("syntax-a", expand)
-	r.RegisterImportExpander("example.com/p", expand)
+	r.RegisterImportCallExpander("example.com/p", expand)
 	r.RegisterStub("example.com/p", "StubA", "syntax-a")
 	sid, ex, ok := r.Lookup("example.com/p", "StubA")
 	if !ok || sid != "syntax-a" || ex == nil {
@@ -34,8 +34,8 @@ func TestRegisterProviderErrors(t *testing.T) {
 func X() {}
 `),
 	})
-	if err := r.RegisterProvider("p", bad, func(macro.Context, *ast.CallExpr) (macro.ExpandResult, error) {
-		return macro.ExpandResult{}, nil
+	if err := r.RegisterProvider("p", bad, func(macro.CallContext, *ast.CallExpr) (macro.CallExpandResult, error) {
+		return macro.CallExpandResult{}, nil
 	}); err == nil {
 		t.Fatal("want missing directive error")
 	}
@@ -67,8 +67,8 @@ func TestLookupDifferentProvidersSameStubName(t *testing.T) {
 			"e.go": []byte(`package ` + pkg + `
 import ("go/ast"; "github.com/arcane-craft/go-macro/macro")
 //macro: syntax-test
-func XExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error) {
-	return macro.ExpandResult{}, nil
+func XExpand(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandResult, error) {
+	return macro.CallExpandResult{}, nil
 }
 `),
 		})
@@ -78,11 +78,11 @@ func XExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error) 
 		return files
 	}
 	r := macro.NewRegistry()
-	expA := func(macro.Context, *ast.CallExpr) (macro.ExpandResult, error) {
-		return macro.ExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: ast.NewIdent("a")}, nil
+	expA := func(macro.CallContext, *ast.CallExpr) (macro.CallExpandResult, error) {
+		return macro.CallExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: ast.NewIdent("a")}, nil
 	}
-	expB := func(macro.Context, *ast.CallExpr) (macro.ExpandResult, error) {
-		return macro.ExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: ast.NewIdent("b")}, nil
+	expB := func(macro.CallContext, *ast.CallExpr) (macro.CallExpandResult, error) {
+		return macro.CallExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: ast.NewIdent("b")}, nil
 	}
 	if err := r.RegisterProvider("a.com/p", makeFiles("p", "Macro"), expA); err != nil {
 		t.Fatal(err)

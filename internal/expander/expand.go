@@ -15,9 +15,21 @@ type Engine struct {
 	Registry *macro.Registry
 }
 
-// ExpandFile expands all macro calls in file and mutates file AST in place.
-// Calls are collected once, then expanded from back to front so types.Info stays valid.
+// ExpandFile expands decl macros then call macros in file and mutates AST in place.
 func (e *Engine) ExpandFile(
+	fset *token.FileSet,
+	file *ast.File,
+	info *types.Info,
+	pkg *types.Package,
+	imports map[string]string,
+) error {
+	if err := e.ExpandDeclMacros(fset, file, info, pkg, imports); err != nil {
+		return err
+	}
+	return e.expandCallMacros(fset, file, info, pkg, imports)
+}
+
+func (e *Engine) expandCallMacros(
 	fset *token.FileSet,
 	file *ast.File,
 	info *types.Info,
@@ -44,7 +56,7 @@ func (e *Engine) ExpandFile(
 		if enc == nil {
 			return macro.ErrorAt(fset, mc.Call.Pos(), "macro call must appear inside a function")
 		}
-		ctx, err := macro.NewContext(fset, file, info, pkg, mc.Call, mc.StubName, mc.SyntaxID, site, enc)
+		ctx, err := macro.NewCallContext(fset, file, info, pkg, mc.Call, mc.StubName, mc.SyntaxID, site, enc)
 		if err != nil {
 			return err
 		}
@@ -52,7 +64,7 @@ func (e *Engine) ExpandFile(
 		if err != nil {
 			return err
 		}
-		if err := macro.ValidateExpandResult(ctx, result); err != nil {
+		if err := macro.ValidateCallExpandResult(ctx, result); err != nil {
 			return macro.ErrorAt(fset, mc.Call.Pos(), "%s", err.Error())
 		}
 		if err := ApplyExpandResult(file, mc.Call, result); err != nil {
@@ -62,8 +74,8 @@ func (e *Engine) ExpandFile(
 	return nil
 }
 
-// RegisterLinked registers linked expanders for import paths that appear in filesByPath.
-func (e *Engine) RegisterLinked(active map[string]macro.Expander, filesByPath map[string][]*ast.File) error {
+// RegisterLinked registers linked call expanders for import paths (legacy tests).
+func (e *Engine) RegisterLinked(active map[string]macro.CallExpander, filesByPath map[string][]*ast.File) error {
 	for importPath, expand := range active {
 		files := filesByPath[importPath]
 		if err := e.Registry.RegisterProvider(importPath, files, expand); err != nil {

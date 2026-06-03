@@ -28,17 +28,17 @@ func TestLegalSpliceTargetsExpr(t *testing.T) {
 	assertTargets(t, legal, macro.SpliceReplaceCallExpr)
 }
 
-func TestValidateExpandResultZeroTarget(t *testing.T) {
+func TestValidateCallExpandResultZeroTarget(t *testing.T) {
 	f, call := parseSnippet(t, `func f() { M(1) }`)
-	err := macro.ValidateExpandResultForCall(f, call, macro.ExpandResult{})
+	err := macro.ValidateCallExpandResultForCall(f, call, macro.CallExpandResult{})
 	if err == nil || !strings.Contains(err.Error(), "Target is required") {
 		t.Fatalf("got %v", err)
 	}
 }
 
-func TestValidateExpandResultWrongTargetAtReturn(t *testing.T) {
+func TestValidateCallExpandResultWrongTargetAtReturn(t *testing.T) {
 	f, call := parseSnippet(t, `func f() int { return M(1) }`)
-	err := macro.ValidateExpandResultForCall(f, call, macro.ExpandResult{
+	err := macro.ValidateCallExpandResultForCall(f, call, macro.CallExpandResult{
 		Target: macro.SpliceReplaceCallExpr,
 		Expr:   ast.NewIdent("1"),
 	})

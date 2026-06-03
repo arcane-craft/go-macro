@@ -16,9 +16,7 @@ import (
 )
 
 // ExpandPackages expands macro-tagged main files and writes *_macro_gen.go.
-// linked maps provider import paths to Expander functions; only paths both linked and
-// imported by the macro main package are activated.
-func ExpandPackages(patterns []string, linked map[string]macro.Expander) error {
+func ExpandPackages(patterns []string, linked *macro.LinkedExpanders) error {
 	expandedFiles := make(map[string]bool)
 	nameCfg := &packages.Config{Mode: packages.NeedName}
 	roots, err := packages.Load(nameCfg, patterns...)
@@ -61,33 +59,35 @@ func ExpandPackages(patterns []string, linked map[string]macro.Expander) error {
 	return nil
 }
 
-func expandOnePackage(pkg *packages.Package, linked map[string]macro.Expander, expandedFiles map[string]bool) error {
+func expandOnePackage(pkg *packages.Package, linked *macro.LinkedExpanders, expandedFiles map[string]bool) error {
 	if pkg.Types == nil || pkg.Fset == nil {
 		return nil
 	}
+	if linked == nil {
+		linked = &macro.LinkedExpanders{}
+	}
 	engine := &Engine{Registry: macro.NewRegistry()}
 
-	imported := importedProviderPaths(pkg)
-	active := make(map[string]macro.Expander)
-	for path, expand := range linked {
-		if imported[path] {
-			active[path] = expand
-		}
+	for sid, expand := range linked.Call {
+		engine.Registry.RegisterCallSyntax(sid, expand)
 	}
+	for sid, expand := range linked.Decl {
+		engine.Registry.RegisterDeclSyntax(sid, expand)
+	}
+
+	imported := importedProviderPaths(pkg)
 	filesByPath := make(map[string][]*ast.File)
-	for path := range active {
+	for path := range imported {
 		files, err := providerFiles(pkg, path)
 		if err != nil {
 			return err
 		}
 		filesByPath[path] = files
-	}
-	if len(active) > 0 {
-		if err := engine.RegisterLinked(active, filesByPath); err != nil {
-			return err
+		if err := engine.Registry.RegisterProviderSources(path, files); err != nil {
+			// provider without macro directives is fine
+			continue
 		}
 	}
-
 	seenGoFile := make(map[string]bool)
 	for _, filename := range pkg.GoFiles {
 		absFile, _ := filepath.Abs(filename)

@@ -7,7 +7,7 @@ import (
 )
 
 // CallSiteKind describes where a macro call appears in the AST (hint for expanders).
-// Splicing uses ExpandResult.Target, not Site alone.
+// Splicing uses CallExpandResult.Target, not Site alone.
 type CallSiteKind int
 
 const (
@@ -17,25 +17,25 @@ const (
 	SiteExpr                       // expression position
 )
 
-// ExpandResult holds the expansion output. Target selects which AST node to replace.
+// CallExpandResult holds the expansion output. Target selects which AST node to replace.
 //
 // Payload by Target:
 //
 //	SpliceReplaceAssignStmt, SpliceReplaceReturnStmt, SpliceReplaceExprStmt → Stmts
 //	SpliceReplaceAssignRHS, SpliceReplaceCallExpr → Expr
 //	SpliceReplaceReturnResults → Exprs
-type ExpandResult struct {
+type CallExpandResult struct {
 	Target SpliceTarget
 	Stmts  []ast.Stmt
 	Exprs  []ast.Expr
 	Expr   ast.Expr
 }
 
-// Expander expands a macro call.
-type Expander func(ctx Context, call *ast.CallExpr) (ExpandResult, error)
+// CallExpander expands a macro call.
+type CallExpander func(ctx CallContext, call *ast.CallExpr) (CallExpandResult, error)
 
-// Context provides expansion-time information for macro authors.
-type Context interface {
+// CallContext provides expansion-time information for macro authors.
+type CallContext interface {
 	FileSet() *token.FileSet
 	File() *ast.File
 	Types() *types.Info

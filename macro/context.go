@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 )
 
-// implContext is the concrete Context implementation used by the expander.
-type implContext struct {
+// implCallContext is the concrete CallContext implementation used by the expander.
+type implCallContext struct {
 	fset        *token.FileSet
 	file        *ast.File
 	info        *types.Info
@@ -23,9 +23,9 @@ type implContext struct {
 	macroPos    token.Pos
 }
 
-// NewContext builds a Context for expanders. file is the macro-tagged source file
+// NewCallContext builds a CallContext for expanders. file is the macro-tagged source file
 // containing call. EnclosingFunc must be *ast.FuncDecl or *ast.FuncLit.
-func NewContext(
+func NewCallContext(
 	fset *token.FileSet,
 	file *ast.File,
 	info *types.Info,
@@ -34,7 +34,7 @@ func NewContext(
 	stubName, syntaxID string,
 	site CallSiteKind,
 	enclosing ast.Node,
-) (Context, error) {
+) (CallContext, error) {
 	if enclosing == nil {
 		return nil, fmt.Errorf("macro: EnclosingFunc is required")
 	}
@@ -47,7 +47,7 @@ func NewContext(
 	if call != nil && call.Lparen.IsValid() {
 		pos = call.Lparen
 	}
-	return &implContext{
+	return &implCallContext{
 		fset:        fset,
 		file:        file,
 		info:        info,
@@ -62,21 +62,21 @@ func NewContext(
 	}, nil
 }
 
-func (c *implContext) FileSet() *token.FileSet { return c.fset }
-func (c *implContext) File() *ast.File         { return c.file }
-func (c *implContext) Types() *types.Info      { return c.info }
-func (c *implContext) Package() *types.Package { return c.pkg }
-func (c *implContext) Call() *ast.CallExpr     { return c.call }
-func (c *implContext) StubName() string        { return c.stubName }
-func (c *implContext) SyntaxID() string        { return c.syntaxID }
-func (c *implContext) Site() CallSiteKind      { return c.site }
-func (c *implContext) LegalSpliceTargets() []SpliceTarget {
+func (c *implCallContext) FileSet() *token.FileSet { return c.fset }
+func (c *implCallContext) File() *ast.File         { return c.file }
+func (c *implCallContext) Types() *types.Info      { return c.info }
+func (c *implCallContext) Package() *types.Package { return c.pkg }
+func (c *implCallContext) Call() *ast.CallExpr     { return c.call }
+func (c *implCallContext) StubName() string        { return c.stubName }
+func (c *implCallContext) SyntaxID() string        { return c.syntaxID }
+func (c *implCallContext) Site() CallSiteKind      { return c.site }
+func (c *implCallContext) LegalSpliceTargets() []SpliceTarget {
 	return LegalSpliceTargetsForCall(c.file, c.call)
 }
-func (c *implContext) EnclosingFunc() ast.Node { return c.enclosing }
-func (c *implContext) MacroPos() token.Pos     { return c.macroPos }
+func (c *implCallContext) EnclosingFunc() ast.Node { return c.enclosing }
+func (c *implCallContext) MacroPos() token.Pos     { return c.macroPos }
 
-func (c *implContext) TempIdent(prefix string) *ast.Ident {
+func (c *implCallContext) TempIdent(prefix string) *ast.Ident {
 	n := c.tempCounter.Add(1)
 	name := fmt.Sprintf("%s%d", prefix, n)
 	return ast.NewIdent(name)

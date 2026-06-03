@@ -50,7 +50,7 @@ func TestApplyExpandResultSiteExpr(t *testing.T) {
 	_, f, call := parseFileSplice(t, `package p
 func f() int { return 1 + M(2) }
 `)
-	if err := ApplyExpandResult(f, call, macro.ExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: ast.NewIdent("9")}); err != nil {
+	if err := ApplyExpandResult(f, call, macro.CallExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: ast.NewIdent("9")}); err != nil {
 		t.Fatal(err)
 	}
 	ret := f.Decls[0].(*ast.FuncDecl).Body.List[0].(*ast.ReturnStmt)
@@ -71,7 +71,7 @@ func g() (int, error) { return 0, nil }
 func cleanup() {}
 `)
 	block, _, _ := findEnclosingBlockStmt(f, call)
-	if err := ApplyExpandResult(f, call, macro.ExpandResult{
+	if err := ApplyExpandResult(f, call, macro.CallExpandResult{
 		Target: macro.SpliceReplaceAssignStmt,
 		Stmts: []ast.Stmt{
 			&ast.AssignStmt{Tok: token.DEFINE, Lhs: []ast.Expr{ast.NewIdent("a")}, Rhs: []ast.Expr{ast.NewIdent("b")}},
@@ -93,12 +93,12 @@ func TestApplyExpandResultErrors(t *testing.T) {
 func f() { M(1) }
 `)
 	for _, tc := range []struct {
-		res  macro.ExpandResult
+		res  macro.CallExpandResult
 		frag string
 	}{
-		{macro.ExpandResult{}, "Target is required"},
-		{macro.ExpandResult{Target: macro.SpliceReplaceExprStmt}, "requires non-empty Stmts"},
-		{macro.ExpandResult{Target: macro.SpliceReplaceCallExpr}, "requires Expr"},
+		{macro.CallExpandResult{}, "Target is required"},
+		{macro.CallExpandResult{Target: macro.SpliceReplaceExprStmt}, "requires non-empty Stmts"},
+		{macro.CallExpandResult{Target: macro.SpliceReplaceCallExpr}, "requires Expr"},
 	} {
 		err := ApplyExpandResult(f, call, tc.res)
 		if err == nil || !strings.Contains(err.Error(), tc.frag) {
@@ -115,7 +115,7 @@ func f() int {
 }
 func helper() int { return 1 }
 `)
-	if err := ApplyExpandResult(f, call, macro.ExpandResult{
+	if err := ApplyExpandResult(f, call, macro.CallExpandResult{
 		Target: macro.SpliceReplaceAssignRHS,
 		Expr:   ast.NewIdent("42"),
 	}); err != nil {
@@ -138,7 +138,7 @@ func TestApplyExpandResultInvalidTargetAtReturn(t *testing.T) {
 	_, f, call := parseFileSplice(t, `package p
 func f() int { return M(1) }
 `)
-	err := ApplyExpandResult(f, call, macro.ExpandResult{
+	err := ApplyExpandResult(f, call, macro.CallExpandResult{
 		Target: macro.SpliceReplaceCallExpr,
 		Expr:   ast.NewIdent("1"),
 	})
@@ -235,12 +235,12 @@ func parseSpliceTryFile(t *testing.T, src string) (*token.FileSet, *ast.File, *a
 	return fset, f, call, info, userPkg
 }
 
-func noopExpander(macro.Context, *ast.CallExpr) (macro.ExpandResult, error) {
-	return macro.ExpandResult{}, nil
+func noopExpander(macro.CallContext, *ast.CallExpr) (macro.CallExpandResult, error) {
+	return macro.CallExpandResult{}, nil
 }
 
 // stubTryAssignExpandResult builds Try-assign expansion for k=1 (used by splice tests only).
-func stubTryAssignExpandResult(call *ast.CallExpr) macro.ExpandResult {
+func stubTryAssignExpandResult(call *ast.CallExpr) macro.CallExpandResult {
 	expr := call.Args[0]
 	errIdent := ast.NewIdent("_err1")
 	valIdent := ast.NewIdent("_v2")
@@ -268,7 +268,7 @@ func stubTryAssignExpandResult(call *ast.CallExpr) macro.ExpandResult {
 		Lhs: []ast.Expr{ast.NewIdent("x")},
 		Rhs: []ast.Expr{valIdent},
 	}
-	return macro.ExpandResult{
+	return macro.CallExpandResult{
 		Target: macro.SpliceReplaceAssignStmt,
 		Stmts:  []ast.Stmt{assign, ifStmt, success},
 	}
@@ -281,8 +281,8 @@ import ("go/ast"; "github.com/arcane-craft/go-macro/macro")
 //macro: syntax-try
 func Try[T any](v T, err error) T { panic("x") }
 //macro: syntax-try
-func TryExpand(ctx macro.Context, call *ast.CallExpr) (macro.ExpandResult, error) {
-	return macro.ExpandResult{}, nil
+func TryExpand(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandResult, error) {
+	return macro.CallExpandResult{}, nil
 }
 `, parser.ParseComments)
 	reg := macro.NewRegistry()

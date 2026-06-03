@@ -14,10 +14,20 @@ import (
 	"github.com/arcane-craft/go-macro/macro"
 )
 
-// ProviderLink is a provider package to register for expand.
+// LinkKind distinguishes call vs decl expander registration.
+type LinkKind int
+
+const (
+	LinkCall LinkKind = iota
+	LinkDecl
+)
+
+// ProviderLink is a provider expander to register for expand.
 type ProviderLink struct {
 	ImportPath   string
 	PackageName  string
+	SyntaxID     string
+	Kind         LinkKind
 	ExpanderName string
 }
 
@@ -71,20 +81,43 @@ func DiscoverProviderLinks(patterns []string) ([]ProviderLink, error) {
 		if dep == nil || len(dep.Syntax) == 0 {
 			continue
 		}
-		info, err := macro.ScanProviderFiles(dep.Syntax)
+		scan, err := macro.ScanProviderFiles(dep.Syntax)
 		if err != nil {
 			continue
 		}
-		links = append(links, ProviderLink{
-			ImportPath:   path,
-			PackageName:  dep.Name,
-			ExpanderName: info.ExpanderName,
-		})
+		for _, e := range scan.Entries {
+			if e.CallExpander != "" && len(e.StubNames) > 0 {
+				links = append(links, ProviderLink{
+					ImportPath:   path,
+					PackageName:  dep.Name,
+					SyntaxID:     e.SyntaxID,
+					Kind:         LinkCall,
+					ExpanderName: e.CallExpander,
+				})
+			}
+			if e.DeclExpander != "" && len(e.MarkerTypeNames) > 0 {
+				links = append(links, ProviderLink{
+					ImportPath:   path,
+					PackageName:  dep.Name,
+					SyntaxID:     e.SyntaxID,
+					Kind:         LinkDecl,
+					ExpanderName: e.DeclExpander,
+				})
+			}
+		}
 	}
 	if len(links) == 0 {
 		return nil, fmt.Errorf("macro expand: no macro providers found (import providers in //go:build macro files)")
 	}
-	sort.Slice(links, func(i, j int) bool { return links[i].ImportPath < links[j].ImportPath })
+	sort.Slice(links, func(i, j int) bool {
+		if links[i].ImportPath != links[j].ImportPath {
+			return links[i].ImportPath < links[j].ImportPath
+		}
+		if links[i].SyntaxID != links[j].SyntaxID {
+			return links[i].SyntaxID < links[j].SyntaxID
+		}
+		return links[i].Kind < links[j].Kind
+	})
 	return links, nil
 }
 

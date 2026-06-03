@@ -41,12 +41,18 @@ func WriteGenFile(mainPath string, genConstraint string, fset *token.FileSet, fi
 		buf.WriteString("\n")
 	}
 	for _, decl := range out.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok {
-			continue
-		}
-		if err := printFuncDecl(&buf, fset, fn, lineFile, &cfg); err != nil {
-			return err
+		switch d := decl.(type) {
+		case *ast.GenDecl:
+			if d.Tok != token.TYPE {
+				continue
+			}
+			if err := printTypeGenDecl(&buf, fset, d, lineFile, &cfg); err != nil {
+				return err
+			}
+		case *ast.FuncDecl:
+			if err := printFuncDecl(&buf, fset, d, lineFile, &cfg); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -55,6 +61,19 @@ func WriteGenFile(mainPath string, genConstraint string, fset *token.FileSet, fi
 		return fmt.Errorf("format gen: %w", err)
 	}
 	return os.WriteFile(genPathFor(mainPath), formatted, 0o644)
+}
+
+func printTypeGenDecl(buf *bytes.Buffer, fset *token.FileSet, gen *ast.GenDecl, lineFile string, cfg *printer.Config) error {
+	var sb bytes.Buffer
+	if err := cfg.Fprint(&sb, fset, gen); err != nil {
+		return err
+	}
+	buf.Write(sb.Bytes())
+	if sb.Len() == 0 || sb.Bytes()[sb.Len()-1] != '\n' {
+		buf.WriteByte('\n')
+	}
+	buf.WriteByte('\n')
+	return nil
 }
 
 func printFuncDecl(buf *bytes.Buffer, fset *token.FileSet, fn *ast.FuncDecl, lineFile string, cfg *printer.Config) error {
