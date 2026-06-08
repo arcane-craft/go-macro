@@ -33,5 +33,5 @@
 
 ## 6. 集成验证（可选）
 
-- [ ] 6.1 （可选）在 go-macro-contrib 选一个 Try 分支用 Quote 重写并跑 mactest
+- [x] 6.1 （可选）在 go-macro-contrib 选一个 Try 分支用 Quote 重写并跑 mactest
 - [x] 6.2 根目录 `go test ./...` 全绿
