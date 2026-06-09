@@ -144,7 +144,7 @@ author-guide MUST 在 `阅读指引` 或首段链至根目录 `README.md`（快�
 
 - Marker 四种模板（无参、`[T]`、tag、组合）
 - `DeclExpandResult` 全量 `Fields`/`Methods` 义务
-- Contract 与 Wire 首期场景示例指向 contrib：`github.com/arcane-craft/go-macro-contrib/derivestringer`、`.../wirejson`
+- Contract 与 Wire 首期场景示例指向 contrib：`github.com/arcane-craft/go-macro-contrib/derive`、`.../wirejson`
 
 #### Scenario: 全量 Methods 义务可查
 

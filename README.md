@@ -118,8 +118,8 @@ go test ./...
 
 | syntax-id       | 模块路径                                              | 说明  |
 | --------------- | ------------------------------------------------- | --- |
-| `syntax-inline` | `github.com/arcane-craft/go-macro-contrib/inline` | 过程宏 |
-| `syntax-try`    | `github.com/arcane-craft/go-macro-contrib/try`    | 过程宏 |
+| `inline` | `github.com/arcane-craft/go-macro-contrib/inline` | 过程宏 |
+| `try`    | `github.com/arcane-craft/go-macro-contrib/try`    | 过程宏 |
 
 
 更多说明（含最低兼容核心版本）见 [go-macro-contrib](https://github.com/arcane-craft/go-macro-contrib) 仓库 README。

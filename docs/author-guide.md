@@ -118,13 +118,15 @@ func MineExpand(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandResu
 Decl marker 是空 struct（或带类型参数），`//macro:` 写在**类型** doc 上。使用方在源代码里**匿名嵌入** marker：
 
 ```go
-//macro: derive-stringer
-type DeriveStringer struct{}
+//macro: derive
+type Derive[T any] struct{}
 ```
 
 ```go
+import "fmt"
+
 type Item struct {
-    mypkg.DeriveStringer
+    mypkg.Derive[fmt.Stringer]
     Name string
 }
 ```
@@ -143,14 +145,14 @@ tag 里的键值由你从嵌入字段的 struct tag 读取；marker 类型体内
 Decl Expander 签名：
 
 ```go
-func DeriveStringerExpand(ctx macro.DeclContext, site macro.DeclSite) (macro.DeclExpandResult, error)
+func DeriveExpand(ctx macro.DeclContext, site macro.DeclSite) (macro.DeclExpandResult, error)
 ```
 
 展开成功时，你需要返回**全量** `Fields`（不含嵌入桩）与**全量** `Methods`（receiver 为 Target 的全部方法，含生成与未改动的）。漏掉既有方法会导致生成代码丢失它们——可以用 `ctx.TargetMethods()` 复制现有方法后再修改。
 
 Decl 宏只作用于 Target 的字段与方法；不要生成包级 const/var、其它类型或独立测试文件。
 
-完整示例可参考 contrib：[derivestringer](https://github.com/arcane-craft/go-macro-contrib/tree/master/derivestringer)、[wirejson](https://github.com/arcane-craft/go-macro-contrib/tree/master/wirejson)。
+完整示例可参考 contrib：[derive](https://github.com/arcane-craft/go-macro-contrib/tree/master/derive)、[wirejson](https://github.com/arcane-craft/go-macro-contrib/tree/master/wirejson)。
 
 单测可以用 `mactest.ExpandDecl` / `mactest.ValidateDecl`。
 
@@ -284,9 +286,9 @@ fn := try.Try     // 把桩赋值给变量
 
 | syntax-id | 模块路径 | 类型 |
 | --------- | -------- | ---- |
-| `syntax-inline` | `github.com/arcane-craft/go-macro-contrib/inline` | Call |
-| `syntax-try` | `github.com/arcane-craft/go-macro-contrib/try` | Call |
-| `derive-stringer` | `github.com/arcane-craft/go-macro-contrib/derivestringer` | Decl |
+| `inline` | `github.com/arcane-craft/go-macro-contrib/inline` | Call |
+| `try` | `github.com/arcane-craft/go-macro-contrib/try` | Call |
+| `derive` | `github.com/arcane-craft/go-macro-contrib/derive` | Decl |
 | `wire-json` | `github.com/arcane-craft/go-macro-contrib/wirejson` | Decl |
 
 宏主文件 import 对应包后，执行 `cmd/macro expand` 即可。contrib 中 `TryExpand` / `InlineExpand` 已使用 `CallContext` / `CallExpandResult`。
