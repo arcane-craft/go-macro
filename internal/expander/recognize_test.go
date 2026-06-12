@@ -17,17 +17,14 @@ const providerPath = "example.com/macprov"
 func TestRecognizeExplicitImport(t *testing.T) {
 	providerSrc := `package macprov
 
-import (
-	"go/ast"
-	"github.com/arcane-craft/go-macro/macro"
-)
+import "github.com/arcane-craft/go-macro/macro"
 
 //macro: syntax-test
 func MacroStub(int) int { panic("x") }
 
 //macro: syntax-test
-func MacroExpand(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandResult, error) {
-	return macro.CallExpandResult{}, nil
+func MacroExpand(ctx macro.Context, site macro.Syntax) (macro.Syntax, error) {
+	return nil, nil
 }
 `
 	fset := token.NewFileSet()
@@ -36,11 +33,12 @@ func MacroExpand(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandRes
 		t.Fatal(err)
 	}
 	reg := macro.NewRegistry()
-	if err := reg.RegisterProvider(providerPath, []*ast.File{pf}, func(macro.CallContext, *ast.CallExpr) (macro.CallExpandResult, error) {
-		return macro.CallExpandResult{}, nil
-	}); err != nil {
+	if err := reg.RegisterProviderSources(providerPath, []*ast.File{pf}); err != nil {
 		t.Fatal(err)
 	}
+	reg.RegisterExpander("syntax-test", func(macro.Context, macro.Syntax) (macro.Syntax, error) {
+		return nil, nil
+	})
 
 	src := `package u
 import mp "example.com/macprov"
@@ -92,7 +90,7 @@ func TestRecognizeShadowNotMacro(t *testing.T) {
 	params := types.NewTuple(types.NewParam(0, nil, "", types.Typ[types.Int]))
 	results := types.NewTuple(types.NewParam(0, nil, "", types.Typ[types.Int]))
 	stubSig := types.NewSignature(nil, params, results, false)
-	_ = reg.RegisterProvider(providerPath, []*ast.File{mustParseProvider(t, fset)}, nil)
+	_ = reg.RegisterProviderSources(providerPath, []*ast.File{mustParseProvider(t, fset)})
 
 	src := `package u
 func MacroStub(int) int { return 0 }
@@ -123,7 +121,7 @@ func f() int { return MacroStub(1) }
 func TestRecognizeMethodCallNotMacro(t *testing.T) {
 	fset := token.NewFileSet()
 	reg := macro.NewRegistry()
-	_ = reg.RegisterProvider(providerPath, []*ast.File{mustParseProvider(t, fset)}, nil)
+	_ = reg.RegisterProviderSources(providerPath, []*ast.File{mustParseProvider(t, fset)})
 
 	src := `package u
 type S struct{}
@@ -154,12 +152,12 @@ func f() int {
 func mustParseProvider(t *testing.T, fset *token.FileSet) *ast.File {
 	t.Helper()
 	pf, err := parser.ParseFile(fset, "p.go", `package macprov
-import ("go/ast"; "github.com/arcane-craft/go-macro/macro")
+import "github.com/arcane-craft/go-macro/macro"
 //macro: syntax-test
 func MacroStub(int) int { panic("x") }
 //macro: syntax-test
-func MacroExpand(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandResult, error) {
-	return macro.CallExpandResult{}, nil
+func MacroExpand(ctx macro.Context, site macro.Syntax) (macro.Syntax, error) {
+	return nil, nil
 }
 `, parser.ParseComments)
 	if err != nil {

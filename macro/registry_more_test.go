@@ -10,15 +10,16 @@ import (
 
 func TestRegistryRegisterStubAndSyntax(t *testing.T) {
 	r := macro.NewRegistry()
-	expand := func(macro.CallContext, *ast.CallExpr) (macro.CallExpandResult, error) {
-		return macro.CallExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: ast.NewIdent("1")}, nil
-	}
-	r.RegisterSyntax("syntax-a", expand)
-	r.RegisterImportCallExpander("example.com/p", expand)
+	expand := noopExpander
+	r.RegisterExpander("syntax-a", expand)
 	r.RegisterStub("example.com/p", "StubA", "syntax-a")
-	sid, ex, ok := r.Lookup("example.com/p", "StubA")
-	if !ok || sid != "syntax-a" || ex == nil {
-		t.Fatalf("Lookup: ok=%v sid=%q", ok, sid)
+	sid, ok := r.SyntaxIDForStub("example.com/p", "StubA")
+	if !ok || sid != "syntax-a" {
+		t.Fatalf("SyntaxIDForStub: ok=%v sid=%q", ok, sid)
+	}
+	ex, ok := r.LookupExpander(sid)
+	if !ok || ex == nil {
+		t.Fatalf("LookupExpander: ok=%v", ok)
 	}
 	stubs := r.ProviderStubs("missing")
 	if stubs != nil {
@@ -26,7 +27,7 @@ func TestRegistryRegisterStubAndSyntax(t *testing.T) {
 	}
 }
 
-func TestRegisterProviderErrors(t *testing.T) {
+func TestRegisterProviderSourcesErrors(t *testing.T) {
 	r := macro.NewRegistry()
 	fset := token.NewFileSet()
 	bad, _ := macro.ParseProviderFiles(fset, map[string][]byte{
@@ -34,13 +35,8 @@ func TestRegisterProviderErrors(t *testing.T) {
 func X() {}
 `),
 	})
-	if err := r.RegisterProvider("p", bad, func(macro.CallContext, *ast.CallExpr) (macro.CallExpandResult, error) {
-		return macro.CallExpandResult{}, nil
-	}); err == nil {
+	if err := r.RegisterProviderSources("p", bad); err == nil {
 		t.Fatal("want missing directive error")
-	}
-	if err := r.RegisterProvider("p", bad, nil); err == nil {
-		t.Fatal("want nil expander error")
 	}
 }
 
@@ -65,10 +61,10 @@ func TestLookupDifferentProvidersSameStubName(t *testing.T) {
 		files, err := macro.ParseProviderFiles(fset, map[string][]byte{
 			"s.go": []byte("package " + pkg + "\n//macro: syntax-test\nfunc " + stub + "() { panic(\"x\") }\n"),
 			"e.go": []byte(`package ` + pkg + `
-import ("go/ast"; "github.com/arcane-craft/go-macro/macro")
+import "github.com/arcane-craft/go-macro/macro"
 //macro: syntax-test
-func XExpand(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandResult, error) {
-	return macro.CallExpandResult{}, nil
+func XExpand(ctx macro.Context, site macro.Syntax) (macro.Syntax, error) {
+	return nil, nil
 }
 `),
 		})
@@ -78,24 +74,30 @@ func XExpand(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandResult,
 		return files
 	}
 	r := macro.NewRegistry()
-	expA := func(macro.CallContext, *ast.CallExpr) (macro.CallExpandResult, error) {
-		return macro.CallExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: ast.NewIdent("a")}, nil
-	}
-	expB := func(macro.CallContext, *ast.CallExpr) (macro.CallExpandResult, error) {
-		return macro.CallExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: ast.NewIdent("b")}, nil
-	}
-	if err := r.RegisterProvider("a.com/p", makeFiles("p", "Macro"), expA); err != nil {
+	expA := noopExpander
+	expB := func(macro.Context, macro.Syntax) (macro.Syntax, error) { return nil, nil }
+	if err := r.RegisterProviderSources("a.com/p", makeFiles("p", "Macro")); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.RegisterProvider("b.com/p", makeFiles("p", "Macro"), expB); err != nil {
+	if err := r.RegisterProviderSources("b.com/p", makeFiles("p", "Macro")); err != nil {
 		t.Fatal(err)
 	}
-	_, exA, ok := r.Lookup("a.com/p", "Macro")
-	if !ok || exA == nil {
-		t.Fatal("a")
+	r.RegisterExpander("syntax-test", expA)
+	sidA, ok := r.SyntaxIDForStub("a.com/p", "Macro")
+	if !ok {
+		t.Fatal("a sid")
 	}
-	_, exB, ok := r.Lookup("b.com/p", "Macro")
-	if !ok || exB == nil {
-		t.Fatal("b")
+	_, ok = r.LookupExpander(sidA)
+	if !ok {
+		t.Fatal("a expander")
+	}
+	r.RegisterExpander("syntax-test", expB)
+	sidB, ok := r.SyntaxIDForStub("b.com/p", "Macro")
+	if !ok {
+		t.Fatal("b sid")
+	}
+	_, ok = r.LookupExpander(sidB)
+	if !ok {
+		t.Fatal("b expander")
 	}
 }

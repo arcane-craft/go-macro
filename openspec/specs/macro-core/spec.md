@@ -5,16 +5,18 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 ## Requirements
 ### Requirement: 宏上下文 API
 
-`macro` 包 MUST 提供 **`CallContext`** 接口（过程宏 / 调用点宏），至少包含：`FileSet`、**`File`（`*ast.File`）**、`types.Info`、当前 `*types.Package`、宏调用 `*ast.CallExpr`、`StubName`、`SyntaxID`、`CallSiteKind`、**`LegalSpliceTargets() []SpliceTarget`**、**`EnclosingFunc`（`*ast.FuncDecl` 或 `*ast.FuncLit`）**、生成临时标识符（`TempIdent`）、`MacroPos()`。
+`macro` 包 MUST 提供 **`Context`** 接口，且 **仅** 包含：`FileSet()`、**`Types() *types.Info`**、**`TempIdent(prefix string) *ast.Ident`**。
 
-`EnclosingFunc` 为通用调用语境，供各 Call provider 自行解释；`macro` 包 MUST NOT 内置 Try 专用 k 规则。
+`Context` MUST NOT 包含 `File()`、`*ast.CallExpr` / `Call()`、`StubName`、`SyntaxID`、`CallSiteKind` / `Site()`、`LegalSpliceTargets()`、`EnclosingFunc()`、`MacroPos()`、`*types.Package`（除非后续 ADDED 明确恢复）。
 
-过程宏 MUST NOT 使用已移除的 `Context` 类型名；文档与 API MUST 使用 `CallContext`。
+宏位置 MUST 由 **`site Syntax` 的 `MacroPos()`** 提供。外层函数签名 MUST 通过 **`EnclosingSignature` / `EnclosingResults`**（见 macro-enclosing-signature）获取，MUST NOT 通过 `EnclosingFunc()` AST API。
 
-#### Scenario: 展开器获取调用语境
+`macro` 包 MUST NOT 内置 Try 专用 k 规则或 Try 专用 Quote 洞注入。
 
-- **WHEN** `TryExpand` 处理 `return Try(expr)`
-- **THEN** `ctx.Site()` MUST 为 `SiteReturn`，且 `ctx.EnclosingFunc()` MUST 提供外层返回签名
+#### Scenario: 极简 Context
+
+- **WHEN** provider 实现 `Expander` 且仅需 typecheck
+- **THEN** MUST 可仅使用 `ctx.FileSet()`、`ctx.Types()`、`ctx.TempIdent()`
 
 #### Scenario: 框架不内置 Try k 规则
 
@@ -23,74 +25,59 @@ TBD - created by archiving change go-macro-extension. Update Purpose after archi
 
 ### Requirement: ExpandResult 与 Expander 签名
 
-`macro` 包 MUST 定义（过程宏）：
+`macro` 包 MUST 定义：
 
-- `SpliceTarget` 枚举（名称保留），至少包含六种 `SpliceReplace*`
-- **`CallExpandResult`** 含必填 `Target SpliceTarget` 与载荷 `Stmts`/`Exprs`/`Expr`
-- **`CallExpander func(ctx CallContext, call *ast.CallExpr) (CallExpandResult, error)`**
+- **`Expander func(ctx Context, site Syntax) (Syntax, error)`** — **统一**宏展开签名；MUST NOT 再区分 `CallExpander` / `DeclExpander` 为 normative 作者 API
 
-贴回语义仅由 `Target` 与对应载荷决定。语法桩 MUST 在**各桩函数** doc 中含 `//macro: <syntax-id>`。Call Expander 函数 MUST 在同 syntax-id doc 下符合 `CallExpander` 签名。
+语法桩 MUST 在 doc 中含 `//macro: <syntax-id>`。Expander MUST 在同 syntax-id doc 下注册。
 
-`macro` 包 MUST 提供 **`ValidateCallExpandResult(ctx CallContext, result CallExpandResult) error`**。
+引擎 MUST 通过 **`ValidateSplice(out, meta)` + `Apply(file, meta, out)`** 贴回（`meta` 含 **MatchedSpan** 与 Match 时确定的 **`Plan []SpliceStep`**；无 normative `InferTarget`）；Expander MUST NOT 返回 `CallExpandResult` / `DeclExpandResult` 作为 normative 作者 API。
 
-`CallSiteKind`（`Site()`）MAY 供 provider 语义分支，MUST NOT 作为引擎贴回依据。
+**Migration**：MAY 提供短期 **Call-only** adapter：`CallExpander` → `Expander`；adapter MUST 将 `CallExpandResult.Target` 编译为 `[]SpliceStep`（`TargetToPlan`）。**MUST NOT** 提供 `DeclExpander` / `DeclExpandResult` adapter（方案 C）。
 
-#### Scenario: 表达式宏显式 Target
+Provider MAY 实现手写 `Expander`（非 `SyntaxRules` / `SyntaxCase`），但 MUST 在返回 `out` 前对 `site` 调用 `Match(pattern)` 写入 meta 槽（design D19）；**MUST NOT** 暴露 `SetMatchMeta` 给 provider。
 
-- **WHEN** 某 Call 宏返回 `CallExpandResult{Target: SpliceReplaceCallExpr, Expr: e}`
-- **THEN** `ValidateCallExpandResult` MUST 通过
+#### Scenario: SyntaxRules Expander
 
-#### Scenario: 隐式字段推断已移除
+- **WHEN** provider 注册 `SyntaxRules(clause...)` 为 Expander
+- **THEN** expand MUST 成功且贴回由 Match 产出的 `Plan` + `Apply` 完成
 
-- **WHEN** 某 `CallExpander` 返回未设置 `Target` 的 `CallExpandResult`
-- **THEN** `ValidateCallExpandResult` MUST 失败
+#### Scenario: 旧 CallExpandResult 作者 API deprecated
+
+- **WHEN** provider 直接返回 `CallExpandResult`
+- **THEN** MUST 经 adapter 过渡；最终 MUST 迁移为 `Syntax`
 
 ### Requirement: 通用宏注册与查找
 
-系统 MUST 支持：对宏主文件已 import 的 provider，解析 **函数桩** 与 **Call Expander**、**marker 类型** 与 **Decl Expander** 上的 `//macro: <syntax-id>`，并结合 link 构建注册表。
+系统 MUST 支持：对宏主文件已 import 的 provider，解析 **函数桩**、**marker 类型** 与 **Expander** 上的 `//macro: <syntax-id>`，并结合 link 构建注册表。
 
-**同一 provider 包 MUST 允许多个 syntax-id**。每个 syntax-id MUST 独立映射 Call 桩集合、Decl marker 集合、可选 `CallExpander`、可选 `DeclExpander`。
+**同一 provider 包 MUST 允许多个 syntax-id**。每个 syntax-id MUST 映射桩集合与 **单一 `Expander`**（MAY 由 `SyntaxCase` 内多 clause 覆盖 Call/Decl 形态）。
 
-Call 宏识别 MUST 使用 `(syntax-id 或 importPath, stubFuncName)` 查找 `CallExpander`（实现 MUST 支持多 syntax-id per import path）。
-
-`internal/expander` 与 `macro/expandtool` MUST NOT 硬编码具体 provider Expander。
-
-#### Scenario: 注册多桩名到同一 syntax-id
-
-- **WHEN** `try` 包中 `syntax-try` 绑定 `TryExpand`，存在桩 `Try` 与 `Try2`
-- **THEN** 注册表 MUST 将 `Try`、`Try2` 映射到同一 `CallExpander`
+注册表 MUST NOT 将 Call Expander 与 Decl Expander 作为 normative 分列类型（adapter 期 MAY 保留内部分发）。
 
 #### Scenario: 同包多 syntax-id
 
-- **WHEN** provider 含 `derive-stringer` 与 `wire-json` 两种 marker 类型
-- **THEN** 注册表 MUST 分别映射到各自 DeclExpander
+- **WHEN** provider 含 `syntax-try` 与 `syntax-derive` 两个 Expander
+- **THEN** 注册表 MUST 分别映射
 
 ### Requirement: 轻薄 AST 辅助（首版）
 
-`macro` 包 MUST 提供最小辅助：`CallContext`、`CallExpandResult`、`DeclContext`、`DeclExpandResult`、`SpliceTarget`、`ValidateCallExpandResult`、`ValidateDeclExpandResult`、`TempIdent`、定位/错误辅助。
+`macro` 包 MUST 提供：`Context`、`Syntax`、`Bindings`（含 `Get` 与 `Elems`）、`Quote`、`SyntaxRules`、`SyntaxCase`、`EnclosingSignature` / `EnclosingResults` / `ZeroSyntax`、`ErrorAt`、定位辅助。`MatchMeta` / `SpliceStep` MUST 为引擎内部类型（定义于 `internal/expander`，**非** provider 公开 API）；贴回 meta 经 **`site` 内部槽**传递（design D15），不得要求作者构造或返回 `MatchMeta`。
 
-框架 MUST 在 **`macro/quote` 可选子包** 提供模板化 AST 组装（见 `macro-quote` 规范）。provider 实现 Call 或 Decl Expander时：
+模板化 AST MUST 通过 **`macro.Quote` + `SyntaxRules`** 完成；**MUST NOT** 要求 import 独立 `macro/quote` 子包（见 macro-template REMOVED）。
 
-- MUST NOT 被**强制** import `macro/quote` 或任何独立 astbuilder 包；
-- MAY import `macro/quote` 以用 `@kind{ }` / `#` 模板构造展开结果。
+#### Scenario: SyntaxRules 实现 Inline
 
-#### Scenario: 首版无 astbuilder 依赖
-
-- **WHEN** provider 实现 Call 或 Decl Expander 且选择不 import `macro/quote`
-- **THEN** MUST 可仅依赖 `macro` 根包公开 API 完成实现
-
-#### Scenario: 可选 quote 子包
-
-- **WHEN** provider import `github.com/arcane-craft/go-macro/macro/quote` 并使用 `quote.Stmts` 等 API
-- **THEN** MUST NOT 要求同时 import 其它 astbuilder 包
+- **WHEN** provider 使用 `SyntaxRules` 且未手写 `go/ast`
+- **THEN** MUST 可 `go test` 且 expand 行为正确
 
 ### Requirement: Provider 纯 Expand 测试辅助
 
-`macro/mactest` MUST 支持 Call 与 Decl 单测：`ExpandCall` / `ExpandDecl`（或等价）及 `ValidateCall` / `ValidateDecl`。
+`macro/mactest` MUST 支持统一 Expander 单测：`Expand(ctx, site)` 或包装 `ExpandCall`/`ExpandDecl` 调用新 API，并提供 Validate 等价能力。
 
-#### Scenario: TryExpand 单测
+#### Scenario: SyntaxRules 单测
 
-- **WHEN** `try` 包测试调用 `mactest.ExpandCall(TryExpand, snippet)`
+- **WHEN** 测试 `SyntaxRules(Inline...)` snippet
 - **THEN** MUST 无需 macro tag 即可 `go test`
 
 ### Requirement: 合法贴回目标枚举
@@ -124,17 +111,10 @@ provider 包内的语法桩（包级 panic 函数）在运行时 MUST panic，�
 
 ### Requirement: expandtool 展开入口
 
-`macro/expandtool` MUST 提供：
+`macro/expandtool` MUST 提供 **`Register(syntaxID string, expand Expander)`**（或等价统一注册）。MAY 保留 **`RegisterCall`** 为 Call adapter 别名；**MUST NOT** 提供 **`RegisterDecl`** adapter 别名（Decl 须 native `Expander`）。
 
-- **`RegisterCall(syntaxID string, expand CallExpander)`**（或等价，按 syntax-id 注册 Call）
-- **`RegisterDecl(syntaxID string, expand DeclExpander)`**（或等价）
-- **`RegisteredCall() map[string]CallExpander`**、**`RegisteredDecl() map[string]DeclExpander`**（或合并视图供 expand 使用）
-- **`Run(args, linked)`** — `linked` 结构 MUST 能同时携带 Call 与 Decl 注册表
+#### Scenario: 统一注册表 expand
 
-MUST NOT 仅保留无区分的 `Register(importPath, Expander)` 作为唯一入口（可保留兼容别名至实现完成，spec 以分列注册为准）。
-
-#### Scenario: Main 使用 Registered 注册表
-
-- **WHEN** expand_runner 已 `RegisterCall` / `RegisterDecl` 且执行 expand
-- **THEN** MUST 展开已 import 且已 link 的 Call 与 Decl 宏
+- **WHEN** expand_runner 已 Register 多个 syntax-id Expander
+- **THEN** MUST 展开已 import 且已 link 的所有宏站点
 

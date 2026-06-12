@@ -1,36 +1,35 @@
 package expandtool_test
 
 import (
-	"go/ast"
 	"testing"
 
 	"github.com/arcane-craft/go-macro/macro"
 	"github.com/arcane-craft/go-macro/macro/expandtool"
 )
 
-func noopExpand(macro.CallContext, *ast.CallExpr) (macro.CallExpandResult, error) {
-	return macro.CallExpandResult{}, nil
+func noopUnified(macro.Context, macro.Syntax) (macro.Syntax, error) {
+	return nil, nil
 }
 
-func TestRegisteredCallReturnsCopy(t *testing.T) {
-	const sid = "syntax-copy-test"
-	expandtool.RegisterCall(sid, noopExpand)
-	t.Cleanup(func() { expandtool.RegisterCall(sid, nil) })
+func TestRegisteredReturnsCopy(t *testing.T) {
+	const sid = "syntax-unified-copy"
+	expandtool.Register(sid, noopUnified)
+	t.Cleanup(func() { expandtool.Register(sid, nil) })
 
-	got := expandtool.RegisteredCall()
-	got["other"] = noopExpand
-	if _, ok := expandtool.RegisteredCall()[sid]; !ok {
-		t.Fatal("RegisteredCall missing registered syntax-id")
+	got := expandtool.Registered()
+	got["other"] = noopUnified
+	if _, ok := expandtool.Registered()[sid]; !ok {
+		t.Fatal("Registered missing syntax-id")
 	}
-	if _, ok := expandtool.RegisteredCall()["other"]; ok {
-		t.Fatal("RegisteredCall must not reflect caller mutations")
+	if _, ok := expandtool.Registered()["other"]; ok {
+		t.Fatal("Registered must not reflect caller mutations")
 	}
 }
 
 func TestRunNilLinkedUsesRegistered(t *testing.T) {
 	const sid = "syntax-nil-linked"
-	expandtool.RegisterCall(sid, noopExpand)
-	t.Cleanup(func() { expandtool.RegisterCall(sid, nil) })
+	expandtool.Register(sid, noopUnified)
+	t.Cleanup(func() { expandtool.Register(sid, nil) })
 
 	if err := expandtool.Run([]string{"./..."}, nil); err != nil {
 		t.Fatalf("Run with nil linked: %v", err)
@@ -40,7 +39,7 @@ func TestRunNilLinkedUsesRegistered(t *testing.T) {
 func TestRunDefaultPatterns(t *testing.T) {
 	var nilArgs []string
 	var emptyArgs []string
-	linked := &macro.LinkedExpanders{Call: map[string]macro.CallExpander{}}
+	linked := &macro.LinkedExpanders{Expand: map[string]macro.Expander{}}
 	if err := expandtool.Run(nilArgs, linked); err != nil {
 		t.Fatalf("Run(nil, {}): %v", err)
 	}
@@ -50,7 +49,7 @@ func TestRunDefaultPatterns(t *testing.T) {
 }
 
 func TestRunPropagatesError(t *testing.T) {
-	linked := &macro.LinkedExpanders{Call: map[string]macro.CallExpander{}}
+	linked := &macro.LinkedExpanders{Expand: map[string]macro.Expander{}}
 	err := expandtool.Run([]string{"\x00invalid"}, linked)
 	if err == nil {
 		t.Fatal("expected error from invalid pattern")

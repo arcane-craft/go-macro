@@ -1,7 +1,6 @@
 package expander
 
 import (
-	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
@@ -25,22 +24,19 @@ func (e *Engine) ExpandDeclMacros(
 		if len(sites) == 0 {
 			return nil
 		}
-		site := sites[0]
-		syntaxID, expand, ok := e.Registry.LookupDeclMarker(site.MarkerImportPath, site.MarkerTypeName)
+		ds := sites[0]
+		syntaxID, ok := e.lookupDeclSyntaxID(ds.MarkerImportPath, ds.MarkerTypeName)
 		if !ok {
-			return macro.ErrorAt(fset, site.EmbedField.Pos(), "decl macro %q not linked", site.MarkerTypeName)
+			return macro.ErrorAt(fset, ds.EmbedField.Pos(), "decl macro %q not linked", ds.MarkerTypeName)
 		}
-		ctx := macro.NewDeclContext(fset, file, info, pkg, site, syntaxID)
-		result, err := expand(ctx, site)
-		if err != nil {
-			return err
+		expand, ok := e.lookupUnifiedExpanderForDecl(syntaxID, ds.MarkerImportPath, ds.MarkerTypeName)
+		if !ok {
+			return macro.ErrorAt(fset, ds.EmbedField.Pos(), "decl macro %q requires native Expander", ds.MarkerTypeName)
 		}
-		if err := macro.ValidateDeclExpandResult(ctx, result); err != nil {
-			return macro.ErrorAt(fset, site.EmbedField.Pos(), "%s", err.Error())
+		if err := e.expandOneDeclSite(fset, file, info, ds.EmbedField, expand); err != nil {
+			return macro.ErrorAt(fset, ds.EmbedField.Pos(), "%s", err.Error())
 		}
-		if err := ApplyDeclExpandResult(file, site.Target, result); err != nil {
-			return macro.ErrorAt(fset, site.EmbedField.Pos(), "%s", err.Error())
-		}
+		_ = pkg
 	}
 }
 
@@ -50,8 +46,8 @@ func RecognizeDeclSites(
 	info *types.Info,
 	imports map[string]string,
 	reg *macro.Registry,
-) ([]macro.DeclSite, error) {
-	var sites []macro.DeclSite
+) ([]declSite, error) {
+	var sites []declSite
 	for _, decl := range file.Decls {
 		gen, ok := decl.(*ast.GenDecl)
 		if !ok || gen.Tok != token.TYPE {
@@ -81,12 +77,12 @@ func RecognizeDeclSites(
 				if !reg.HasMarker(importPath, baseName) {
 					continue
 				}
-				syntaxID, _, ok := reg.LookupDeclMarker(importPath, baseName)
+				syntaxID, ok := reg.SyntaxIDForMarker(importPath, baseName)
 				if !ok || syntaxID == "" {
 					continue
 				}
 				_ = syntaxID
-				sites = append(sites, macro.DeclSite{
+				sites = append(sites, declSite{
 					Target:           ts,
 					TargetType:       targetType,
 					EmbedIndex:       i,
@@ -100,6 +96,18 @@ func RecognizeDeclSites(
 		}
 	}
 	return sites, nil
+}
+
+// declSite describes one anonymous embed of a registered marker type.
+type declSite struct {
+	Target           *ast.TypeSpec
+	TargetType       types.Type
+	EmbedIndex       int
+	EmbedField       *ast.Field
+	MarkerImportPath string
+	MarkerTypeName   string
+	MarkerTypeArgs   []types.Type
+	MacroTag         macro.MacroTag
 }
 
 func macroTagFromField(field *ast.Field) macro.MacroTag {
@@ -135,79 +143,4 @@ func embeddedMarker(
 	}
 	_ = imports
 	return importPath, baseName, typeArgs, nil
-}
-
-// ApplyDeclExpandResult replaces struct fields and Target methods in file.
-func ApplyDeclExpandResult(file *ast.File, target *ast.TypeSpec, result macro.DeclExpandResult) error {
-	st, ok := target.Type.(*ast.StructType)
-	if !ok {
-		return fmt.Errorf("macro: decl target %s is not a struct", target.Name.Name)
-	}
-	st.Fields = &ast.FieldList{List: result.Fields}
-	removeTargetMethods(file, target.Name.Name)
-	insertTargetMethods(file, target, result.Methods)
-	return nil
-}
-
-func removeTargetMethods(file *ast.File, typeName string) {
-	var kept []ast.Decl
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if ok && fn.Recv != nil && len(fn.Recv.List) > 0 {
-			if recvNameForDecl(fn.Recv.List[0].Type) == typeName {
-				continue
-			}
-		}
-		kept = append(kept, decl)
-	}
-	file.Decls = kept
-}
-
-func insertTargetMethods(file *ast.File, target *ast.TypeSpec, methods []*ast.FuncDecl) {
-	idx := -1
-	for i, decl := range file.Decls {
-		gen, ok := decl.(*ast.GenDecl)
-		if !ok || gen.Tok != token.TYPE {
-			continue
-		}
-		for _, spec := range gen.Specs {
-			if spec == target {
-				idx = i
-				break
-			}
-		}
-	}
-	if idx < 0 {
-		file.Decls = append(file.Decls, declsFromMethods(methods)...)
-		return
-	}
-	var out []ast.Decl
-	out = append(out, file.Decls[:idx+1]...)
-	out = append(out, declsFromMethods(methods)...)
-	out = append(out, file.Decls[idx+1:]...)
-	file.Decls = out
-}
-
-func declsFromMethods(methods []*ast.FuncDecl) []ast.Decl {
-	out := make([]ast.Decl, len(methods))
-	for i, m := range methods {
-		out[i] = m
-	}
-	return out
-}
-
-func recvNameForDecl(t ast.Expr) string {
-	switch r := t.(type) {
-	case *ast.Ident:
-		return r.Name
-	case *ast.StarExpr:
-		if id, ok := r.X.(*ast.Ident); ok {
-			return id.Name
-		}
-	case *ast.IndexExpr:
-		return recvNameForDecl(r.X)
-	case *ast.IndexListExpr:
-		return recvNameForDecl(r.X)
-	}
-	return ""
 }

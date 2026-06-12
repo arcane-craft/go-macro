@@ -87,6 +87,10 @@ go test ./...
 | `go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider <name>` | 生成宏库 provider 骨架（写宏库时用）     |
 
 
+## Expander API（syntax-rules）
+
+统一签名：`func(ctx Context, site Syntax) (Syntax, error)`。推荐 `macro.SyntaxRules` / `macro.SyntaxCase` 与 `expandtool.Register(syntaxID, expander)`。模板化 AST 使用 `macro.Quote`（`macro/quote` 子包已移除）。
+
 ## 文档
 
 - [宏作者指南](docs/author-guide.md) — provider 契约、单测、使用方细节

@@ -38,7 +38,7 @@ func RecognizeMacroCalls(
 		if !reg.HasStub(pkgPath, stub) {
 			return true
 		}
-		syntaxID, _, ok := reg.Lookup(pkgPath, stub)
+		syntaxID, ok := reg.SyntaxIDForStub(pkgPath, stub)
 		if !ok {
 			return true
 		}

@@ -39,16 +39,22 @@ type Item struct {
 	}
 	reg := macro.NewRegistry()
 	reg.RegisterMarker("p", "Marker", "test-syntax")
-	reg.RegisterDeclSyntax("test-syntax", func(ctx macro.DeclContext, site macro.DeclSite) (macro.DeclExpandResult, error) {
-		var fields []*ast.Field
-		st := site.Target.Type.(*ast.StructType)
-		for _, fld := range st.Fields.List {
-			if len(fld.Names) > 0 {
-				fields = append(fields, fld)
+	reg.RegisterExpander("test-syntax", macro.SyntaxCase(macro.Clause{
+		Pattern: `type $item struct { Marker $field ... }`,
+		Transform: func(ctx macro.Context, site macro.Syntax, binds macro.Bindings) (macro.Syntax, error) {
+			fields, _ := binds.Elems("field")
+			var list []*ast.Field
+			for _, f := range fields {
+				list = append(list, f.Underlying().(*ast.Field))
 			}
-		}
-		return macro.DeclExpandResult{Fields: fields, Methods: []*ast.FuncDecl{}}, nil
-	})
+			itemTS, _ := binds.Get("item")
+			ts := itemTS.Underlying().(*ast.TypeSpec)
+			return macro.WrapNode(&ast.TypeSpec{
+				Name: ts.Name,
+				Type: &ast.StructType{Fields: &ast.FieldList{List: list}},
+			}), nil
+		},
+	}))
 	engine := &expander.Engine{Registry: reg}
 	if err := engine.ExpandDeclMacros(fset, f, info, pkg, map[string]string{}); err != nil {
 		t.Fatal(err)

@@ -88,24 +88,15 @@ func Macro[T any](v T) T {
 `, name, syntaxID),
 		"expand.go": fmt.Sprintf(`package %s
 
-import (
-	"go/ast"
-
-	"github.com/arcane-craft/go-macro/macro"
-)
+import "github.com/arcane-craft/go-macro/macro"
 
 //macro: %s
 
-// MacroExpand expands Macro calls (placeholder: returns argument).
-func MacroExpand(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandResult, error) {
-	if ctx.Site() != macro.SiteExpr {
-		return macro.CallExpandResult{}, macro.ErrorAt(ctx.FileSet(), ctx.MacroPos(), "Macro only allowed in expression position")
-	}
-	if len(call.Args) != 1 {
-		return macro.CallExpandResult{}, macro.ErrorAt(ctx.FileSet(), ctx.MacroPos(), "Macro expects one argument")
-	}
-	return macro.CallExpandResult{Target: macro.SpliceReplaceCallExpr, Expr: call.Args[0]}, nil
-}
+// MacroExpander expands Macro calls (placeholder: returns argument).
+var MacroExpander = macro.SyntaxRules(macro.Clause{
+	Pattern:  "Macro($v)",
+	Template: "#v",
+})
 `, name, syntaxID),
 		"expand_test.go": fmt.Sprintf(`package %s_test
 
@@ -117,10 +108,13 @@ import (
 )
 
 func TestMacroExpand(t *testing.T) {
-	_, err := mactest.ExpandCall(%s.MacroExpand, "Macro", "%s", `+"`"+`
+	out, err := mactest.ExpandSyntax(%s.MacroExpander, "Macro", "%s", `+"`"+`
 func f() int { return Macro(42) }
 `+"`"+`)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := out.ToExpr(); err != nil {
 		t.Fatal(err)
 	}
 }

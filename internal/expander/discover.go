@@ -14,20 +14,11 @@ import (
 	"github.com/arcane-craft/go-macro/macro"
 )
 
-// LinkKind distinguishes call vs decl expander registration.
-type LinkKind int
-
-const (
-	LinkCall LinkKind = iota
-	LinkDecl
-)
-
 // ProviderLink is a provider expander to register for expand.
 type ProviderLink struct {
 	ImportPath   string
 	PackageName  string
 	SyntaxID     string
-	Kind         LinkKind
 	ExpanderName string
 }
 
@@ -86,24 +77,15 @@ func DiscoverProviderLinks(patterns []string) ([]ProviderLink, error) {
 			continue
 		}
 		for _, e := range scan.Entries {
-			if e.CallExpander != "" && len(e.StubNames) > 0 {
-				links = append(links, ProviderLink{
-					ImportPath:   path,
-					PackageName:  dep.Name,
-					SyntaxID:     e.SyntaxID,
-					Kind:         LinkCall,
-					ExpanderName: e.CallExpander,
-				})
+			if e.Expander == "" {
+				continue
 			}
-			if e.DeclExpander != "" && len(e.MarkerTypeNames) > 0 {
-				links = append(links, ProviderLink{
-					ImportPath:   path,
-					PackageName:  dep.Name,
-					SyntaxID:     e.SyntaxID,
-					Kind:         LinkDecl,
-					ExpanderName: e.DeclExpander,
-				})
-			}
+			links = append(links, ProviderLink{
+				ImportPath:   path,
+				PackageName:  dep.Name,
+				SyntaxID:     e.SyntaxID,
+				ExpanderName: e.Expander,
+			})
 		}
 	}
 	if len(links) == 0 {
@@ -113,10 +95,7 @@ func DiscoverProviderLinks(patterns []string) ([]ProviderLink, error) {
 		if links[i].ImportPath != links[j].ImportPath {
 			return links[i].ImportPath < links[j].ImportPath
 		}
-		if links[i].SyntaxID != links[j].SyntaxID {
-			return links[i].SyntaxID < links[j].SyntaxID
-		}
-		return links[i].Kind < links[j].Kind
+		return links[i].SyntaxID < links[j].SyntaxID
 	})
 	return links, nil
 }

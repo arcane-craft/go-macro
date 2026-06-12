@@ -68,11 +68,8 @@ func expandOnePackage(pkg *packages.Package, linked *macro.LinkedExpanders, expa
 	}
 	engine := &Engine{Registry: macro.NewRegistry()}
 
-	for sid, expand := range linked.Call {
-		engine.Registry.RegisterCallSyntax(sid, expand)
-	}
-	for sid, expand := range linked.Decl {
-		engine.Registry.RegisterDeclSyntax(sid, expand)
+	for sid, expand := range linked.Expand {
+		engine.Registry.RegisterExpander(sid, expand)
 	}
 
 	imported := importedProviderPaths(pkg)

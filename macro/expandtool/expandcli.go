@@ -73,12 +73,7 @@ func writeExpandRunner(dir string, links []expander.ProviderLink) error {
 	seen = make(map[string]bool)
 	for _, l := range links {
 		alias := importAlias(l.ImportPath, seen)
-		switch l.Kind {
-		case expander.LinkCall:
-			fmt.Fprintf(&b, "\texpandtool.RegisterCall(%q, %s.%s)\n", l.SyntaxID, alias, l.ExpanderName)
-		case expander.LinkDecl:
-			fmt.Fprintf(&b, "\texpandtool.RegisterDecl(%q, %s.%s)\n", l.SyntaxID, alias, l.ExpanderName)
-		}
+		fmt.Fprintf(&b, "\texpandtool.Register(%q, %s.%s)\n", l.SyntaxID, alias, l.ExpanderName)
 	}
 	b.WriteString("\tif err := expandtool.Run(os.Args[1:], nil); err != nil {\n")
 	b.WriteString("\t\texpandtool.ExitWithError(err)\n")

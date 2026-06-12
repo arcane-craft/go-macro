@@ -47,39 +47,109 @@ func (e *Engine) expandCallMacros(
 		return calls[i].Call.Pos() > calls[j].Call.Pos()
 	})
 	for _, mc := range calls {
-		_, expand, ok := e.Registry.Lookup(mc.ImportPath, mc.StubName)
-		if !ok {
-			return macro.ErrorAt(fset, mc.Call.Pos(), "unknown macro stub %q", mc.StubName)
-		}
-		site := classifySiteInFile(file, mc.Call)
-		enc := enclosingFuncInFile(file, mc.Call)
-		if enc == nil {
-			return macro.ErrorAt(fset, mc.Call.Pos(), "macro call must appear inside a function")
-		}
-		ctx, err := macro.NewCallContext(fset, file, info, pkg, mc.Call, mc.StubName, mc.SyntaxID, site, enc)
-		if err != nil {
+		if err := e.expandOneCallSite(fset, file, info, pkg, mc); err != nil {
 			return err
-		}
-		result, err := expand(ctx, mc.Call)
-		if err != nil {
-			return err
-		}
-		if err := macro.ValidateCallExpandResult(ctx, result); err != nil {
-			return macro.ErrorAt(fset, mc.Call.Pos(), "%s", err.Error())
-		}
-		if err := ApplyExpandResult(file, mc.Call, result); err != nil {
-			return macro.ErrorAt(fset, mc.Call.Pos(), "%s", err.Error())
 		}
 	}
 	return nil
 }
 
-// RegisterLinked registers linked call expanders for import paths (legacy tests).
-func (e *Engine) RegisterLinked(active map[string]macro.CallExpander, filesByPath map[string][]*ast.File) error {
+func (e *Engine) expandOneCallSite(
+	fset *token.FileSet,
+	file *ast.File,
+	info *types.Info,
+	pkg *types.Package,
+	mc MacroCall,
+) error {
+	expand, ok := e.lookupUnifiedExpander(mc.ImportPath, mc.StubName, mc.SyntaxID)
+	if !ok {
+		return macro.ErrorAt(fset, mc.Call.Pos(), "unknown macro stub %q", mc.StubName)
+	}
+	site, err := ResolveSite(fset, file, mc.Call)
+	if err != nil {
+		return macro.ErrorAt(fset, mc.Call.Pos(), "%s", err.Error())
+	}
+	ctx := macro.NewContext(fset, info)
+	out, err := expand(ctx, site)
+	if err != nil {
+		return macro.ErrorAt(fset, mc.Call.Pos(), "%s", err.Error())
+	}
+	meta, ok := MatchMetaFromSite(site)
+	if !ok {
+		return macro.ErrorAt(fset, mc.Call.Pos(), "macro: missing match meta after expand")
+	}
+	if err := ValidateSplice(out, meta); err != nil {
+		return macro.ErrorAt(fset, mc.Call.Pos(), "%s", err.Error())
+	}
+	if err := Apply(file, meta, out); err != nil {
+		return macro.ErrorAt(fset, mc.Call.Pos(), "%s", err.Error())
+	}
+	if stmts, err := out.ToStmts(); err == nil {
+		macro.StampStmtPos(site.MacroPos(), stmts)
+	}
+	_ = pkg
+	return nil
+}
+
+func (e *Engine) expandOneDeclSite(
+	fset *token.FileSet,
+	file *ast.File,
+	info *types.Info,
+	embed *ast.Field,
+	expand macro.Expander,
+) error {
+	site, err := ResolveSite(fset, file, embed)
+	if err != nil {
+		return err
+	}
+	ctx := macro.NewContext(fset, info)
+	out, err := expand(ctx, site)
+	if err != nil {
+		return err
+	}
+	meta, ok := MatchMetaFromSite(site)
+	if !ok {
+		return fmt.Errorf("macro: missing match meta after expand")
+	}
+	if err := ValidateSplice(out, meta); err != nil {
+		return err
+	}
+	if err := Apply(file, meta, out); err != nil {
+		return err
+	}
+	if stmts, err := out.ToStmts(); err == nil {
+		macro.StampStmtPos(site.MacroPos(), stmts)
+	}
+	return nil
+}
+
+func (e *Engine) lookupDeclSyntaxID(importPath, markerName string) (string, bool) {
+	return e.Registry.SyntaxIDForMarker(importPath, markerName)
+}
+
+func (e *Engine) lookupUnifiedExpanderForDecl(syntaxID, _, _ string) (macro.Expander, bool) {
+	return e.Registry.LookupExpander(syntaxID)
+}
+
+func (e *Engine) lookupUnifiedExpander(_, _, syntaxID string) (macro.Expander, bool) {
+	return e.Registry.LookupExpander(syntaxID)
+}
+
+// RegisterLinked registers linked expanders for import paths (tests).
+func (e *Engine) RegisterLinked(active map[string]macro.Expander, filesByPath map[string][]*ast.File) error {
 	for importPath, expand := range active {
 		files := filesByPath[importPath]
-		if err := e.Registry.RegisterProvider(importPath, files, expand); err != nil {
+		if err := e.Registry.RegisterProviderSources(importPath, files); err != nil {
 			return fmt.Errorf("register %s: %w", importPath, err)
+		}
+		scan, err := macro.ScanProviderFiles(files)
+		if err != nil {
+			return fmt.Errorf("register %s: %w", importPath, err)
+		}
+		for _, ent := range scan.Entries {
+			if ent.Expander != "" {
+				e.Registry.RegisterExpander(ent.SyntaxID, expand)
+			}
 		}
 	}
 	return nil

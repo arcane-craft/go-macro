@@ -36,12 +36,28 @@ go run github.com/arcane-craft/go-macro/cmd/macro@latest init provider mymac
 
 ### 框架契约
 
-框架支持两条宏轨道，同一 provider 包可以注册**多个** `syntax-id`。`expandtool.RegisterCall` / `RegisterDecl` 按 syntax-id 分别 link。展开时引擎**先处理 Decl，再处理 Call**（使用方通常无感，编写 Expander 时知道顺序即可）。
+框架支持 Call / Decl 两类站点，统一为 **syntax-rules** 模型。同一 provider 包可注册多个 `syntax-id`；推荐 `expandtool.Register(syntaxID, expander)` 注册统一 `Expander`。展开时引擎**先 Decl、后 Call**。
 
-| 轨道 | 触发方式 | Expander 签名 |
+| 轨道 | 触发方式 | 推荐 Expander |
 | ---- | -------- | ------------- |
-| **Call（过程宏）** | 函数体内 `Stub(...)` | `func(ctx CallContext, call *ast.CallExpr) (CallExpandResult, error)` |
-| **Decl（声明宏）** | struct **匿名嵌入** marker 类型 | `func(ctx DeclContext, site DeclSite) (DeclExpandResult, error)` |
+| **Call** | 函数体内 `Stub(...)` | `macro.SyntaxCase` / `macro.SyntaxRules` |
+| **Decl** | struct **匿名嵌入** marker | `macro.SyntaxCase` / `macro.SyntaxRules` |
+
+统一签名：`func(ctx Context, site Syntax) (Syntax, error)`。`Context` 仅含 `FileSet()`、`Types()`、`TempIdent()`；位置用 `site.MacroPos()`；外层签名用 `EnclosingSignature` / `EnclosingResults`。
+
+**Pattern 首版子集**（`site.Match`）：`Try($inner)`、`$lhs ... := Try($inner)`、`var $lhs ... =`、`return $vals ... ,`、`Try($inner);`、`type $item struct { Derive[$iface] $field ... }`。贴回由 Match 产出 `Plan`，经 `ValidateSplice` + `Apply` 执行。
+
+**Decl embed 元数据**（旧 `DeclSite` 对照）：
+
+| 旧 API | 新路径 |
+| ------ | ------ |
+| `site.Target` / 类型名 | `binds.Get("item")` |
+| 字段列表 | `binds.Elems("field")`，每项 `Underlying()` 为 `*ast.Field`（含 `Tag`） |
+| 类型实参 | `binds.Get("iface")` + `ctx.Types().TypeOf(expr)` |
+| `MacroTag` | `site.Underlying().(*ast.Field).Tag` + `ParseMacroTag` |
+| `TargetMethods()` | 不恢复；未 match 的 methods 自动保留 |
+
+Quote 使用 `macro.Quote(template, map[string]Syntax)`（`#` 洞）；无需 import 独立子包。
 
 #### 标注 `//macro:`
 
@@ -68,9 +84,10 @@ func Mine[T any](v T) T {
 
 ```go
 //macro: syntax-mine
-func MineExpand(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandResult, error) {
-    // ...
-}
+var MineExpander = macro.SyntaxRules(macro.Clause{
+    Pattern:   "Mine($v)",
+    Template:  "#v",
+})
 ```
 
 #### Call 宏：语法桩约定
@@ -83,35 +100,11 @@ func MineExpand(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandResu
 - 使用方须**直接调用**语法桩：`pkg.Stub(...)`（或 dot-import 下的 `Stub(...)`）
 - 桩只能作为调用表达式出现；若把桩当作函数值传递、赋值、返回，或传给 `reflect.ValueOf` / `reflect.TypeOf`，`expand` 会报错
 
-#### Call 宏：设置 `Target` 并返回结果
+#### Call 宏：Match 与贴回
 
-展开 Call 宏时，你需要在 `CallExpandResult` 里设置 `Target`（`macro.SpliceTarget`），告诉引擎要替换哪段 AST。引擎按 `Target` 贴回，不会根据你填了 `Stmts` 还是 `Expr` 来猜测替换范围。
+展开 Call 宏时，pattern match 决定 **MatchedSpan**（引擎替换哪段 AST）与 **Plan**（如何贴回）。你返回的 `Syntax` 形状须与 Plan 一致，经 `ValidateSplice` 校验后由引擎 `Apply`。
 
-**先按调用位置选 Target**（完整列表见 `ctx.LegalSpliceTargets()`）：
-
-| 宏写在哪里 | 常用 `Target` |
-| ---------- | ------------- |
-| 赋值右侧 `:=` / `=` | `SpliceReplaceAssignRHS`（只换右侧，保留左侧）或 `SpliceReplaceAssignStmt`（换整条赋值） |
-| `return` 里 | `SpliceReplaceReturnResults` 或 `SpliceReplaceReturnStmt` |
-| 单独一条语句 | `SpliceReplaceExprStmt` |
-| 表达式里 | `SpliceReplaceCallExpr` |
-
-**各 Target 对应的替换范围与载荷：**
-
-| `Target` | 替换范围 | 你需要提供的载荷 |
-| -------- | -------- | ---------------- |
-| `SpliceReplaceAssignStmt` | 整条赋值语句 | 非空 `Stmts` |
-| `SpliceReplaceAssignRHS` | 仅赋值右侧含宏的那一项 | 非空 `Expr` |
-| `SpliceReplaceReturnStmt` | 整条 `return` 语句 | 非空 `Stmts` |
-| `SpliceReplaceReturnResults` | 仅 `return` 的返回值列表 | 非空 `Exprs` |
-| `SpliceReplaceExprStmt` | 整条表达式语句 | 非空 `Stmts` |
-| `SpliceReplaceCallExpr` | 仅宏 `CallExpr` | 非空 `Expr` |
-
-单测时，展开后可以调用 `mactest.ValidateCall(ctx, result)`，检查 `Target` 与载荷是否与调用处一致。
-
-#### Call 宏：读取外层函数语境
-
-展开时，你可以通过 `ctx.EnclosingFunc()` 获取包住本次宏调用的函数（`*ast.FuncDecl` 或 `*ast.FuncLit`），用来读取外层 `return` 签名等信息。
+读取外层函数签名用 `macro.EnclosingSignature(ctx, site)` / `macro.EnclosingResults(ctx, site)`，勿依赖 `*ast.FuncDecl`。
 
 #### Decl 宏：marker 与 Expander
 
@@ -142,74 +135,35 @@ type Item struct {
 
 tag 里的键值由你从嵌入字段的 struct tag 读取；marker 类型体内的 struct 字段仅作文档提示，引擎不会读取。
 
-Decl Expander 签名：
-
-```go
-func DeriveExpand(ctx macro.DeclContext, site macro.DeclSite) (macro.DeclExpandResult, error)
-```
-
-展开成功时，你需要返回**全量** `Fields`（不含嵌入桩）与**全量** `Methods`（receiver 为 Target 的全部方法，含生成与未改动的）。漏掉既有方法会导致生成代码丢失它们——可以用 `ctx.TargetMethods()` 复制现有方法后再修改。
+Decl Expander 使用与 Call 相同的 `Expander` 签名；pattern 通常匹配 `type $item struct { Marker $field ... }` 等形式。返回的 `Syntax` 经 `ToDecls()` 提供新 TypeSpec 与**新生成** methods；未 match 的既有 methods 自动保留。
 
 Decl 宏只作用于 Target 的字段与方法；不要生成包级 const/var、其它类型或独立测试文件。
 
 完整示例可参考 contrib：[derive](https://github.com/arcane-craft/go-macro-contrib/tree/master/derive)、[wirejson](https://github.com/arcane-craft/go-macro-contrib/tree/master/wirejson)。
 
-单测可以用 `mactest.ExpandDecl` / `mactest.ValidateDecl`。
+单测可以用 `mactest.Expand`（Decl）或 `mactest.ExpandSyntax`（Call）。
 
 ### 模板化 AST（Quote）
 
-[`macro/quote`](../macro/quote/) 是**可选**子包：用接近最终 Go 的模板组装 AST，不必手写大量 `go/ast` 结构体。简单宏仍可只用手写 AST，**不强制** import quote。
+`macro.Quote(template, map[string]Syntax)` 用接近最终 Go 的模板组装 AST，不必手写大量 `go/ast` 结构体。简单宏仍可只用手写 AST，**不强制**使用 Quote。
 
-#### 根 kind 与 API
+模板直接写 body（无 `@kind{ }`）；形状由 `Syntax.ToExpr` / `ToStmts` / `ToDecls` 等决定。洞名为 `#name`，绑定值为 `macro.Syntax`（或 `QuoteElems` 列表）。
 
-`quote.Expr` / `Exprs` / `Stmts` / `Decls` 已由函数名指定 kind，模板**直接写 body** 即可，不必再包一层 `@kind{ }`：
-
-```go
-quote.Stmts(`x := 1`, nil)
-quote.Expr(`#name`, args)
-```
-
-也仍支持显式 `@kind{ }` 包装（与上式等价）。`quote.Quote(tpl, args)` 无 typed 入口，模板最外层必须是且仅为 `@expr{ }` / `@exprs{ }` / `@stmts{ }` / `@decls{ }` 之一，根闭括号 `}` 之后不得再有非空白内容。
-
-| kind | API | 产出 | 典型贴回 |
-| ---- | --- | ---- | -------- |
-| expr | `quote.Expr` | `ast.Expr` | `CallExpandResult.Expr`（`SpliceReplaceCallExpr` / `SpliceReplaceAssignRHS`） |
-| exprs | `quote.Exprs` | `[]ast.Expr` | `CallExpandResult.Exprs`（`SpliceReplaceReturnResults`） |
-| stmts | `quote.Stmts` | `[]ast.Stmt` | `CallExpandResult.Stmts`（`SpliceReplaceAssignStmt` / `SpliceReplaceReturnStmt` / `SpliceReplaceExprStmt`） |
-| decls | `quote.Decls` | `[]ast.Decl` | Decl Expander 的 `Methods` / `Fields` 等（全量合并由 Expander 负责） |
-
-#### `#name` 填洞
-
-模板体内用 `#` 加 Go 标识符表示洞，例如 `#x`。绑定表为 `map[string]any`，每个出现的洞名都必须提供值。`#` 扫描会忽略字符串、字符字面量与注释内的 `#`。
-
-常见绑定类型：
-
-- `string`：作为标识符字面（如 `"file"` → ident `file`）
-- `ast.Expr`、`[]ast.Expr`
-- `ast.Stmt`、`[]ast.Stmt`（`#block` 且 body 仅为单一洞时，列表会整段展开）
-- `ast.Decl`、`[]ast.Decl`
-- 嵌套 `quote.Expr` / `Exprs` / `Stmts` / `Decls` / `Quote` 的返回值
-
-模板中的注释会经 `ParseComments` 保留在合成 AST 中（printer 输出可见）。
-
-#### 与贴回、行号衔接
-
-Quote **不会**设置 `SpliceTarget` 或调用 splice 引擎；Expander 仍需显式设置 `CallExpandResult.Target`（或 Decl 侧返回全量形状）。
-
-Call 宏在 `quote.Stmts` / `quote.Expr` 等成功后，**必须**调用 `macro.StampStmtPos(ctx.MacroPos(), stmts)`（与手写 AST 相同），以便生成代码的 `//line` 指向宏调用处。
+Call 宏在 `ToStmts()` 成功后，**必须**调用 `macro.StampStmtPos(site.MacroPos(), stmts)`，以便生成代码的 `//line` 指向宏调用处。
 
 ```go
-stmts, err := quote.Stmts(`res, err := #call
+out, err := macro.Quote(`res, err := #call
 if err != nil { return #zero, err }
-return res, nil`, map[string]any{
-    "call": callExpr,
-    "zero": "0",
+return res, nil`, map[string]macro.Syntax{
+    "call": macro.WrapExpr(callExpr),
+    "zero": macro.WrapExpr(ast.NewIdent("0")),
 })
 if err != nil {
-    return macro.CallExpandResult{}, macro.ErrorAt(ctx.FileSet(), ctx.MacroPos(), "%v", err)
+    return nil, err
 }
-macro.StampStmtPos(ctx.MacroPos(), stmts)
-return macro.CallExpandResult{Target: macro.SpliceReplaceReturnStmt, Stmts: stmts}, nil
+stmts, _ := out.ToStmts()
+macro.StampStmtPos(site.MacroPos(), stmts)
+return out, nil
 ```
 
 #### 调用方如何找到你的宏
@@ -221,14 +175,13 @@ return macro.CallExpandResult{Target: macro.SpliceReplaceReturnStmt, Stmts: stmt
 你不必先跑完整 expand 流水线，可以直接用 `macro/mactest` 测展开逻辑：
 
 ```go
-result, err := mactest.ExpandCall(MineExpand, "Mine", "syntax-mine", `
+out, err := mactest.ExpandSyntax(MineExpander, "Mine", "syntax-mine", `
 func Mine[T any](v T) T { panic("stub") }
 func f() int { return 1 + Mine(2) }
 `)
 if err != nil {
     t.Fatal(err)
 }
-// 可选：在同一 snippet 上构造 ctx 后调用 mactest.ValidateCall(ctx, result)
 ```
 
 ## 宏使用方
@@ -291,7 +244,7 @@ fn := try.Try     // 把桩赋值给变量
 | `derive` | `github.com/arcane-craft/go-macro-contrib/derive` | Decl |
 | `wire-json` | `github.com/arcane-craft/go-macro-contrib/wirejson` | Decl |
 
-宏主文件 import 对应包后，执行 `cmd/macro expand` 即可。contrib 中 `TryExpand` / `InlineExpand` 已使用 `CallContext` / `CallExpandResult`。
+宏主文件 import 对应包后，执行 `cmd/macro expand` 即可。
 
 ### 本地联调
 

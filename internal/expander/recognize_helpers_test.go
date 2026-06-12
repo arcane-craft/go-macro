@@ -15,23 +15,24 @@ import (
 func setupProviderReg(t *testing.T, fset *token.FileSet, providerPath string) *macro.Registry {
 	t.Helper()
 	pf, err := parser.ParseFile(fset, "p.go", `package macprov
-import ("go/ast"; "github.com/arcane-craft/go-macro/macro")
+import "github.com/arcane-craft/go-macro/macro"
 //macro: syntax-test
 func MacroStub(int) int { panic("x") }
 //macro: syntax-test
-func MacroExpand(ctx macro.CallContext, call *ast.CallExpr) (macro.CallExpandResult, error) {
-	return macro.CallExpandResult{}, nil
+func MacroExpand(ctx macro.Context, site macro.Syntax) (macro.Syntax, error) {
+	return nil, nil
 }
 `, parser.ParseComments)
 	if err != nil {
 		t.Fatal(err)
 	}
 	reg := macro.NewRegistry()
-	if err := reg.RegisterProvider(providerPath, []*ast.File{pf}, func(macro.CallContext, *ast.CallExpr) (macro.CallExpandResult, error) {
-		return macro.CallExpandResult{}, nil
-	}); err != nil {
+	if err := reg.RegisterProviderSources(providerPath, []*ast.File{pf}); err != nil {
 		t.Fatal(err)
 	}
+	reg.RegisterExpander("syntax-test", func(macro.Context, macro.Syntax) (macro.Syntax, error) {
+		return nil, nil
+	})
 	return reg
 }
 
